@@ -1,0 +1,16 @@
+{
+  "regressor": {
+    "cgpa": 0.21978660759031027,
+    "total_problems": 0.22204757929745256,
+    "avg_difficulty": 0.17241809115823487,
+    "consistency_score": 0.17703017753041375,
+    "commit_frequency": 0.20871754442358853
+  },
+  "classifier": {
+    "cgpa": 0.25028409090909093,
+    "total_problems": 0.22124368686868692,
+    "avg_difficulty": 0.20546085858585858,
+    "consistency_score": 0.1408459595959596,
+    "commit_frequency": 0.18216540404040404
+  }
+}
