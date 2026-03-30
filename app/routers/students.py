@@ -1,13 +1,14 @@
 from fastapi      import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.db        import get_db
+# ENSURED 'text' is imported here
+from sqlalchemy import text
+from app.db         import get_db
 from app.schemas   import StudentCreate, StudentResponse
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
 @router.post("", response_model=StudentResponse, status_code=201)
 def create_student(body: StudentCreate, db: Session = Depends(get_db)):
-    # Check for duplicate email before inserting
     existing = db.execute(
         text("SELECT id FROM students WHERE email = :email"),
         {"email": body.email}

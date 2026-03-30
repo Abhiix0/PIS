@@ -53,3 +53,20 @@ CREATE INDEX IF NOT EXISTS idx_coding_date      ON coding_activity(solved_at);
 CREATE INDEX IF NOT EXISTS idx_github_student   ON github_activity(student_id);
 CREATE INDEX IF NOT EXISTS idx_github_date      ON github_activity(commit_date);
 CREATE INDEX IF NOT EXISTS idx_students_branch  ON students(branch);
+
+-- Add to sql/schema.sql — these cover the most common access patterns
+
+-- Partial index: only index recent coding activity (last 90 days)
+-- Much smaller than a full index, same benefit for consistency_score query
+CREATE INDEX IF NOT EXISTS idx_coding_recent
+    ON coding_activity(student_id, solved_at)
+    WHERE solved_at >= CURRENT_DATE - INTERVAL '90 days';
+
+-- Composite index for the github frequency query
+CREATE INDEX IF NOT EXISTS idx_github_student_date
+    ON github_activity(student_id, commit_date);
+
+-- Covering index on features — avoids heap fetch for the most common read
+CREATE INDEX IF NOT EXISTS idx_features_covering
+    ON features(student_id)
+    INCLUDE (total_problems, avg_difficulty, consistency_score, commit_frequency);

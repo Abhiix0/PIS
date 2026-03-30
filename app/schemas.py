@@ -1,4 +1,4 @@
-from pydantic   import BaseModel, Field, EmailStr, field_validator
+from pydantic   import BaseModel, Field, EmailStr, field_validator, ConfigDict
 from typing     import Optional
 from datetime   import datetime
 
@@ -13,7 +13,7 @@ class StudentCreate(BaseModel):
     @field_validator('branch')
     @classmethod
     def branch_uppercase(cls, v: str) -> str:
-        return v.upper().strip()  # normalise: "cse" → "CSE"
+        return v.upper().strip()
 
 # ── Response schemas (what the API sends OUT) ─────────────────────────
 
@@ -25,8 +25,7 @@ class StudentResponse(BaseModel):
     branch:     str
     created_at: datetime
 
-    class Config:
-        from_attributes = True  # allows building from ORM objects
+    model_config = ConfigDict(from_attributes=True)
 
 class FeatureResponse(BaseModel):
     student_id:        int
@@ -36,8 +35,7 @@ class FeatureResponse(BaseModel):
     commit_frequency:  float
     computed_at:       Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class PredictionResponse(BaseModel):
     student_id:      int
@@ -45,8 +43,7 @@ class PredictionResponse(BaseModel):
     category:        str
     last_updated:    Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class RecommendationItem(BaseModel):
     priority:       int
