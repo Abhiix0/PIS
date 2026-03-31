@@ -1,3 +1,4 @@
+import os
 from fastapi         import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm  import Session
 from sqlalchemy      import text
@@ -5,8 +6,27 @@ from app.db          import get_db
 from app.schemas     import InsightResponse, RankingItem
 from insights.engine import InsightEngine
 
-router  = APIRouter(tags=["Insights"])
-_engine = InsightEngine()  # instantiate once at module load
+router = APIRouter(tags=["Insights"])
+
+_IMPORTANCES_PATH = "models/feature_importances.json"
+_engine: InsightEngine | None = None
+_engine_mtime: float = 0.0
+
+
+def _get_engine() -> InsightEngine:
+    """Return the InsightEngine, reloading it if feature_importances.json
+    has been updated since last instantiation (e.g. after ml/train.py runs).
+    Cost: one os.path.getmtime() syscall per request — negligible.
+    """
+    global _engine, _engine_mtime
+    try:
+        current_mtime = os.path.getmtime(_IMPORTANCES_PATH)
+    except FileNotFoundError:
+        current_mtime = 0.0
+    if _engine is None or current_mtime > _engine_mtime:
+        _engine = InsightEngine()
+        _engine_mtime = current_mtime
+    return _engine
 
 @router.get("/insights/{student_id}", response_model=InsightResponse)
 def get_insights(student_id: int, db: Session = Depends(get_db)):
@@ -18,7 +38,7 @@ def get_insights(student_id: int, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
     try:
-        result = _engine.format_insight(student_id)
+        result = _get_engine().format_insight(student_id)
         return result
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
