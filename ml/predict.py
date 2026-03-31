@@ -39,6 +39,7 @@ def _fetch_scaled_features(student_id: int) -> pd.DataFrame:
 
     # Scale using the fitted scaler saved during feature computation
     df[FEATURE_COLS] = _scaler.transform(df[FEATURE_COLS])
+    df[FEATURE_COLS] = df[FEATURE_COLS].clip(0.0, 1.0)  # guard against out-of-range real data
     return df[FEATURE_COLS]
 
 def predict(student_id: int) -> dict:
