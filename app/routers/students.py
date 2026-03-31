@@ -20,9 +20,9 @@ def create_student(body: StudentCreate, db: Session = Depends(get_db)):
         )
     row = db.execute(
         text("""
-            INSERT INTO students (name, email, cgpa, branch)
-            VALUES (:name, :email, :cgpa, :branch)
-            RETURNING id, name, email, cgpa, branch, created_at
+            INSERT INTO students (name, email, cgpa, branch, github_username, leetcode_username)
+            VALUES (:name, :email, :cgpa, :branch, :github_username, :leetcode_username)
+            RETURNING id, name, email, cgpa, branch, github_username, leetcode_username, created_at
         """),
         body.model_dump()
     ).fetchone()

@@ -70,3 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_github_student_date
 CREATE INDEX IF NOT EXISTS idx_features_covering
     ON features(student_id)
     INCLUDE (total_problems, avg_difficulty, consistency_score, commit_frequency);
+
+-- Migration 001: platform usernames
+ALTER TABLE students ADD COLUMN IF NOT EXISTS github_username VARCHAR(100);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS leetcode_username VARCHAR(100);

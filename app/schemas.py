@@ -5,10 +5,12 @@ from datetime   import datetime
 # ── Request schemas (what the client sends IN) ────────────────────────
 
 class StudentCreate(BaseModel):
-    name:   str   = Field(..., min_length=2, max_length=100)
-    email:  EmailStr
-    cgpa:   float = Field(..., ge=0.0, le=10.0)
-    branch: str   = Field(..., min_length=2, max_length=50)
+    name:              str   = Field(..., min_length=2, max_length=100)
+    email:             EmailStr
+    cgpa:              float = Field(..., ge=0.0, le=10.0)
+    branch:            str   = Field(..., min_length=2, max_length=50)
+    github_username:   Optional[str] = None
+    leetcode_username: Optional[str] = None
 
     @field_validator('branch')
     @classmethod
@@ -18,12 +20,14 @@ class StudentCreate(BaseModel):
 # ── Response schemas (what the API sends OUT) ─────────────────────────
 
 class StudentResponse(BaseModel):
-    id:         int
-    name:       str
-    email:      str
-    cgpa:       float
-    branch:     str
-    created_at: datetime
+    id:                int
+    name:              str
+    email:             str
+    cgpa:              float
+    branch:            str
+    github_username:   Optional[str] = None
+    leetcode_username: Optional[str] = None
+    created_at:        datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,7 +89,8 @@ class RankingItem(BaseModel):
     percentile:      float
 
 class IngestResponse(BaseModel):
-    student_id: int
-    inserted:   int
-    skipped:    int
-    message:    str
+    student_id:  int
+    inserted:    int
+    skipped:     int
+    message:     str
+    data_source: str = "synthetic"
