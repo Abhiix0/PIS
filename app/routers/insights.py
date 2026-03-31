@@ -36,10 +36,10 @@ def get_ranking(
             SELECT s.id, s.name, s.branch, s.cgpa,
                    f.total_problems, f.consistency_score,
                    f.avg_difficulty, f.commit_frequency,
-                   ROUND((s.cgpa*10 + f.total_problems*0.2 +
-                          f.avg_difficulty*5 + f.consistency_score*20 +
-                          f.commit_frequency*15)::NUMERIC, 2) AS composite_score
-            FROM students s JOIN features f ON s.id = f.student_id
+                   p.readiness_score AS composite_score
+            FROM students s
+            JOIN features    f ON s.id = f.student_id
+            JOIN predictions p ON s.id = p.student_id
         ),
         ranked AS (
             SELECT *,

@@ -1,6 +1,7 @@
 -- Global rank + branch rank using window functions
--- composite_score is a weighted sum of all features
--- weights chosen to reflect placement relevance
+-- composite_score = ML readiness_score (0–100, calibrated by Random Forest)
+-- Ranking by the model's output is coherent: all features are already
+-- scaled and weighted by the trained regressor, not by hand-tuned constants.
 
 WITH scored AS (
     SELECT
@@ -12,26 +13,20 @@ WITH scored AS (
         f.avg_difficulty,
         f.consistency_score,
         f.commit_frequency,
-        -- weighted composite score (raw, pre-ML)
-        ROUND(
-            (s.cgpa                * 10)  +
-            (f.total_problems      *  0.2) +
-            (f.avg_difficulty      *  5)  +
-            (f.consistency_score   * 20)  +
-            (f.commit_frequency    * 15)
-        , 2) AS composite_score
-    FROM      students s
-    JOIN      features  f ON s.id = f.student_id
+        p.readiness_score AS composite_score
+    FROM      students    s
+    JOIN      features    f ON s.id = f.student_id
+    JOIN      predictions p ON s.id = p.student_id
 ),
 
 ranked AS (
     SELECT
         *,
         -- global rank across all students
-        RANK()       OVER (ORDER BY composite_score DESC)
+        RANK() OVER (ORDER BY composite_score DESC)
             AS global_rank,
         -- rank within the student's own branch
-        RANK()       OVER (PARTITION BY branch ORDER BY composite_score DESC)
+        RANK() OVER (PARTITION BY branch ORDER BY composite_score DESC)
             AS branch_rank,
         -- percentile: what % of students this student outperforms
         ROUND(
