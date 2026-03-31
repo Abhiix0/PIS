@@ -33,5 +33,17 @@ services:
       - ./models:/app/models
       - ./features:/app/features
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    restart: on-failure
+
 volumes:
   postgres_data:
