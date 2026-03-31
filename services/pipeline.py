@@ -169,10 +169,12 @@ def run(student_id: int) -> dict:
         })
 
     # ── Step 3: Feature computation ───────────────────────────────────
+    # Uses the parameterised single-student SQL variant — O(1) DB work,
+    # not O(n_students) like the full-table version used by ml.train.
     step_start = time.perf_counter()
     try:
-        from features.compute import run_feature_sql
-        run_feature_sql()
+        from features.compute import run_feature_sql_for_student
+        run_feature_sql_for_student(student_id)
         steps.append({
             "step":        "feature_computation",
             "status":      "success",

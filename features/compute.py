@@ -4,9 +4,10 @@ from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
 from config import DATABASE_URL
 
-SQL_PATH     = Path("sql/feature_engineering.sql")
-FEATURES_CSV = Path("features/features_scaled.csv")
-RAW_CSV      = Path("features/features_raw.csv")
+SQL_PATH        = Path("sql/feature_engineering.sql")
+SQL_SINGLE_PATH = Path("sql/feature_engineering_single.sql")
+FEATURES_CSV    = Path("features/features_scaled.csv")
+RAW_CSV         = Path("features/features_raw.csv")
 
 # Columns that will be scaled — cgpa included because ML needs it normalized
 SCALE_COLS = [
@@ -15,7 +16,10 @@ SCALE_COLS = [
 ]
 
 def run_feature_sql():
-    """Execute the SQL pipeline to populate the features table."""
+    """Execute the full-table SQL pipeline to populate the features table.
+    Use for batch recomputation (ml.train, entrypoint.sh).
+    O(n_students) — scans all rows in coding_activity and github_activity.
+    """
     sql = SQL_PATH.read_text()
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -23,6 +27,22 @@ def run_feature_sql():
             with conn.cursor() as cur:
                 cur.execute(sql)
         print("Feature SQL executed — features table updated.")
+    finally:
+        conn.close()
+
+
+def run_feature_sql_for_student(student_id: int):
+    """Execute the parameterised single-student SQL pipeline.
+    Use for real-time pipeline calls (POST /pipeline/{id}).
+    O(1) — only touches rows for this student_id.
+    """
+    sql = SQL_SINGLE_PATH.read_text()
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, {"student_id": student_id})
+        print(f"Feature SQL executed — student {student_id} features updated.")
     finally:
         conn.close()
 
