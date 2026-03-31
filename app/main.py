@@ -4,7 +4,7 @@ from app.db   import check_db_connection
 import time
 from app.logger import logger
 # ADDED 'features' to the import line below
-from app.routers import students, ingest, predictions, insights, features 
+from app.routers import students, ingest, predictions, insights, features, pipeline
 
 app = FastAPI(
     title="Placement Intelligence System",
@@ -25,6 +25,7 @@ app.include_router(predictions.router)
 app.include_router(insights.router)
 # Now 'features' is defined and will not throw NameError
 app.include_router(features.router, prefix="/features", tags=["features"])
+app.include_router(pipeline.router)
 
 # ── Startup event: fail fast if DB is unreachable ─────────────────────
 @app.on_event("startup")

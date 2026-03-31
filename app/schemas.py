@@ -94,3 +94,62 @@ class IngestResponse(BaseModel):
     skipped:     int
     message:     str
     data_source: str = "synthetic"
+
+
+class PipelineStep(BaseModel):
+    step:             str
+    status:           str  # "success" or "error"
+    duration_ms:      float
+    data_source:      Optional[str] = None
+    records_inserted: Optional[int] = None
+    readiness_score:  Optional[float] = None
+    category:         Optional[str] = None
+    weaknesses_found: Optional[int] = None
+    error:            Optional[str] = None
+
+
+class PipelineResponse(BaseModel):
+    # All InsightResponse fields
+    student_id:      int
+    student_name:    str
+    readiness_score: Optional[float]
+    category:        Optional[str]
+    strengths:       list[StrengthItem]
+    weaknesses:      list[WeaknessItem]
+    recommendations: list[RecommendationItem]
+    top_priority:    str
+    # Pipeline metadata
+    pipeline_steps:    list[PipelineStep]
+    total_duration_ms: float
+    ran_at:            str
+
+
+class StudentListItem(BaseModel):
+    id:              int
+    name:            str
+    email:           str
+    branch:          str
+    cgpa:            float
+    category:        Optional[str] = None
+    readiness_score: Optional[float] = None
+    has_prediction:  bool = False
+
+
+class StudentStatus(BaseModel):
+    student_id:           int
+    name:                 str
+    branch:               str
+    cgpa:                 float
+    github_username:      Optional[str] = None
+    leetcode_username:    Optional[str] = None
+    features_computed:    bool
+    features_computed_at: Optional[datetime] = None
+    prediction_exists:    bool
+    readiness_score:      Optional[float] = None
+    category:             Optional[str] = None
+    prediction_updated:   Optional[datetime] = None
+    pipeline_stage:       str  # "no_data"|"features_computed"|"predicted"|"complete"
+
+
+class BatchPipelineRequest(BaseModel):
+    student_ids: list[int] = Field(..., min_length=1, max_length=20)

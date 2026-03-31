@@ -1,9 +1,8 @@
-from fastapi      import APIRouter, Depends, HTTPException, status
+from fastapi        import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-# ENSURED 'text' is imported here
-from sqlalchemy import text
+from sqlalchemy     import text
 from app.db         import get_db
-from app.schemas   import StudentCreate, StudentResponse
+from app.schemas    import StudentCreate, StudentResponse, StudentListItem, StudentStatus
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -38,3 +37,72 @@ def get_student(student_id: int, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
     return dict(row._mapping)
+
+
+@router.get("", response_model=list[StudentListItem])
+def list_students(db: Session = Depends(get_db)):
+    """List all students with their current prediction status."""
+    rows = db.execute(text("""
+        SELECT s.id, s.name, s.email, s.branch, s.cgpa,
+               p.readiness_score,
+               p.category,
+               CASE WHEN p.student_id IS NOT NULL THEN true ELSE false END AS has_prediction
+        FROM   students s
+        LEFT JOIN predictions p ON s.id = p.student_id
+        ORDER BY s.id
+    """)).fetchall()
+    return [dict(r._mapping) for r in rows]
+
+
+@router.get("/{student_id}/status", response_model=StudentStatus)
+def get_student_status(student_id: int, db: Session = Depends(get_db)):
+    """Get a student's current pipeline status.
+
+    pipeline_stage values:
+      'no_data'           — student exists but no activity ingested
+      'features_computed' — features computed but no prediction yet
+      'predicted'         — prediction exists
+      'complete'          — prediction + insight both available
+    """
+    row = db.execute(text("""
+        SELECT s.id, s.name, s.branch, s.cgpa,
+               s.github_username, s.leetcode_username,
+               f.computed_at        AS features_computed_at,
+               p.readiness_score,
+               p.category,
+               p.last_updated       AS prediction_updated
+        FROM   students s
+        LEFT JOIN features    f ON s.id = f.student_id
+        LEFT JOIN predictions p ON s.id = p.student_id
+        WHERE  s.id = :id
+    """), {"id": student_id}).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
+
+    d = dict(row._mapping)
+    features_computed = d.get("features_computed_at") is not None
+    prediction_exists = d.get("readiness_score") is not None
+
+    if prediction_exists:
+        stage = "complete"
+    elif features_computed:
+        stage = "predicted"
+    else:
+        stage = "no_data"
+
+    return {
+        "student_id":           student_id,
+        "name":                 d["name"],
+        "branch":               d["branch"],
+        "cgpa":                 float(d["cgpa"]),
+        "github_username":      d.get("github_username"),
+        "leetcode_username":    d.get("leetcode_username"),
+        "features_computed":    features_computed,
+        "features_computed_at": d.get("features_computed_at"),
+        "prediction_exists":    prediction_exists,
+        "readiness_score":      float(d["readiness_score"]) if d.get("readiness_score") else None,
+        "category":             d.get("category"),
+        "prediction_updated":   d.get("prediction_updated"),
+        "pipeline_stage":       stage,
+    }
