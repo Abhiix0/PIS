@@ -13,6 +13,7 @@ FEATURE_COLS = [
 # Load models once at module level — not on every prediction call
 _regressor  = joblib.load(Path('models/regressor.pkl'))
 _classifier = joblib.load(Path('models/classifier.pkl'))
+_scaler     = joblib.load(Path('models/scaler.pkl'))
 
 def _fetch_scaled_features(student_id: int) -> pd.DataFrame:
     """Pull this student's scaled features from the DB.
@@ -40,12 +41,8 @@ def _fetch_scaled_features(student_id: int) -> pd.DataFrame:
         raise ValueError(f"No features found for student_id={student_id}. "
                          "Run features/compute.py first.")
 
-    # Scale using the same min/max from the full dataset
-    reference = pd.read_csv('features/features_raw.csv')
-    from sklearn.preprocessing import MinMaxScaler
-    scaler = MinMaxScaler()
-    scaler.fit(reference[FEATURE_COLS])
-    df[FEATURE_COLS] = scaler.transform(df[FEATURE_COLS])
+    # Scale using the fitted scaler saved during feature computation
+    df[FEATURE_COLS] = _scaler.transform(df[FEATURE_COLS])
     return df[FEATURE_COLS]
 
 def predict(student_id: int) -> dict:

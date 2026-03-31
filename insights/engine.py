@@ -18,15 +18,15 @@ class InsightEngine:
 
     def format_insight(self, student_id: int) -> dict:
         """Main entry point. Returns structured insight dict for a student."""
-        raw    = self._fetch_raw_features(student_id)
-        result = self._run_rules(raw)
+        data   = self._fetch_student_data(student_id)
+        result = self._run_rules(data)
         ranked = self._rank_by_importance(result['weaknesses'])
 
         return {
             'student_id':      student_id,
-            'student_name':    raw['name'],
-            'readiness_score': self._fetch_score(student_id),
-            'category':        self._fetch_category(student_id),
+            'student_name':    data['name'],
+            'readiness_score': data['readiness_score'],
+            'category':        data['category'],
             'strengths':       result['strengths'],
             'weaknesses':      ranked,
             'recommendations': self._build_recommendations(ranked),
@@ -35,15 +35,17 @@ class InsightEngine:
 
     # ── Private methods ───────────────────────────────────────────────
 
-    def _fetch_raw_features(self, student_id: int) -> dict:
-        """Fetch raw (unscaled) feature values + student name from DB."""
+    def _fetch_student_data(self, student_id: int) -> dict:
+        """Fetch all required student data in a single query."""
         query = """
             SELECT s.name, s.cgpa,
                    f.total_problems, f.avg_difficulty,
-                   f.consistency_score, f.commit_frequency
-            FROM  students s
-            JOIN  features  f ON s.id = f.student_id
-            WHERE s.id = %(sid)s
+                   f.consistency_score, f.commit_frequency,
+                   p.readiness_score, p.category
+            FROM   students s
+            JOIN   features f ON s.id = f.student_id
+            LEFT JOIN predictions p ON s.id = p.student_id
+            WHERE  s.id = %(sid)s
         """
         conn = psycopg2.connect(DATABASE_URL)
         try:
@@ -51,10 +53,18 @@ class InsightEngine:
         finally:
             conn.close()
         if df.empty:
-            raise ValueError(f"Student {student_id} not found or has no features computed.")
-        return df.iloc[0].to_dict()
+            raise ValueError(
+                f"Student {student_id} not found or has no features computed. "
+                "Run POST /predict/{student_id} first."
+            )
+        row = df.iloc[0].to_dict()
+        # Normalise nullable prediction fields
+        if row['readiness_score'] is not None:
+            row['readiness_score'] = float(row['readiness_score'])
+        row['category'] = row['category'] if row['category'] else 'Unknown'
+        return row
 
-    def _run_rules(self, raw: dict) -> dict:
+    def _run_rules(self, data: dict) -> dict:
         """Fire every rule against raw feature values.
         Returns separate strengths and weaknesses lists.
         """
@@ -62,7 +72,7 @@ class InsightEngine:
         weaknesses = []
 
         for rule in RULES:
-            value = raw[rule.feature]
+            value = data[rule.feature]
 
             if rule.is_weak(value):
                 # Format the message with actual values
@@ -112,32 +122,6 @@ class InsightEngine:
                 'why_it_matters': f"Feature importance: {w['importance']:.3f}",
             })
         return result
-
-    def _fetch_score(self, student_id: int) -> float:
-        conn = psycopg2.connect(DATABASE_URL)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT readiness_score FROM predictions WHERE student_id=%s",
-                    (student_id,)
-                )
-                row = cur.fetchone()
-                return float(row[0]) if row else None
-        finally:
-            conn.close()
-
-    def _fetch_category(self, student_id: int) -> str:
-        conn = psycopg2.connect(DATABASE_URL)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT category FROM predictions WHERE student_id=%s",
-                    (student_id,)
-                )
-                row = cur.fetchone()
-                return row[0] if row else 'Unknown'
-        finally:
-            conn.close()
 
 if __name__ == "__main__":
     import json

@@ -33,21 +33,31 @@ def generate_coding_records(student_id: int) -> list[dict]:
         })
     return records
 
-def ingest_coding_activity():
+def ingest_coding_activity(student_id: int = None) -> dict:
     total_inserted = 0
     total_skipped  = 0
+
+    if student_id is not None:
+        if student_id not in STUDENT_PROFILES:
+            raise ValueError(
+                f"No synthetic profile defined for student_id={student_id}. "
+                "Add it to STUDENT_PROFILES."
+            )
+        students_to_process = [student_id]
+    else:
+        students_to_process = list(STUDENT_PROFILES.keys())
 
     with get_connection() as conn:
         cur = conn.cursor()
 
-        for student_id in STUDENT_PROFILES:
-            records = generate_coding_records(student_id)
+        for sid in students_to_process:
+            records = generate_coding_records(sid)
 
             for record in records:
                 try:
                     validate_coding_record(record)  # Python validation first
                 except ValueError as e:
-                    print(f"  [SKIP] student {student_id}: {e}")
+                    print(f"  [SKIP] student {sid}: {e}")
                     total_skipped += 1
                     continue
 
@@ -68,6 +78,8 @@ def ingest_coding_activity():
                     total_skipped += 1
 
     print(f"Coding ingestion complete: {total_inserted} inserted, {total_skipped} skipped")
+    return {'inserted': total_inserted, 'skipped': total_skipped}
 
 if __name__ == "__main__":
-    ingest_coding_activity()
+    result = ingest_coding_activity()
+    print(result)

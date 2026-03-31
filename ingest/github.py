@@ -39,36 +39,52 @@ def generate_github_records(student_id: int) -> list[dict]:
             })
     return records
 
-def ingest_github_activity():
+def ingest_github_activity(student_id: int = None) -> dict:
     total_inserted = 0
     total_skipped  = 0
+
+    if student_id is not None:
+        if student_id not in GITHUB_PROFILES:
+            raise ValueError(
+                f"No synthetic profile defined for student_id={student_id}. "
+                "Add it to GITHUB_PROFILES."
+            )
+        students_to_process = [student_id]
+    else:
+        students_to_process = list(GITHUB_PROFILES.keys())
 
     with get_connection() as conn:
         cur = conn.cursor()
 
-        for student_id in GITHUB_PROFILES:
-            records = generate_github_records(student_id)
+        for sid in students_to_process:
+            records = generate_github_records(sid)
 
             for record in records:
                 try:
                     validate_github_record(record)
                 except ValueError as e:
-                    print(f"  [SKIP] student {student_id}: {e}")
+                    print(f"  [SKIP] student {sid}: {e}")
                     total_skipped += 1
                     continue
 
-                # github_activity has no unique constraint on (student, repo, date)
-                # so we use INSERT directly — idempotency handled by clearing first
                 cur.execute("""
                     INSERT INTO github_activity
                         (student_id, repo_name, commits, commit_date)
                     VALUES
                         (%(student_id)s, %(repo_name)s,
                          %(commits)s, %(commit_date)s)
+                    ON CONFLICT (student_id, repo_name, commit_date) DO NOTHING
                 """, record)
-                total_inserted += 1
+
+                if cur.rowcount == 1:
+                    total_inserted += 1
+                else:
+                    total_skipped += 1
 
     print(f"GitHub ingestion complete: {total_inserted} inserted, {total_skipped} skipped")
+    return {'inserted': total_inserted, 'skipped': total_skipped}
+
 
 if __name__ == "__main__":
-    ingest_github_activity()
+    result = ingest_github_activity()
+    print(result)

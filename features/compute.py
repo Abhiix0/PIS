@@ -53,6 +53,8 @@ def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     """Apply Min-Max scaling to numeric feature columns.
     Saves raw CSV before scaling for reference and debugging.
     """
+    import joblib
+
     # Save raw (unscaled) version — useful for Phase 5 insight thresholds
     df.to_csv(RAW_CSV, index=False)
     print(f"Raw features saved → {RAW_CSV}")
@@ -60,6 +62,9 @@ def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     df_scaled = df.copy()
     scaler = MinMaxScaler()
     df_scaled[SCALE_COLS] = scaler.fit_transform(df[SCALE_COLS])
+
+    joblib.dump(scaler, Path('models/scaler.pkl'))
+    print("Scaler saved → models/scaler.pkl")
 
     # Round to 4 decimal places — keeps CSV readable
     df_scaled[SCALE_COLS] = df_scaled[SCALE_COLS].round(4)

@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pis_db
+      POSTGRES_USER: pis_user
+      POSTGRES_PASSWORD: pis_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./sql/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pis_user -d pis_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://pis_user:pis_password@db:5432/pis_db
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./models:/app/models
+      - ./features:/app/features
+
+volumes:
+  postgres_data:
