@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import Optional
 
@@ -69,34 +70,42 @@ def fetch_github_data(username: str) -> list[dict]:
     if not repos:
         return []
 
-    records = []
+    # Filter repos that are worth querying (skip empty forks, etc.)
+    # and pre-compute commit_date so we don't repeat the parse inside threads.
+    candidates = []
     for repo in repos:
-        repo_name = repo["name"]
-
-        # Use pushed_at as the commit_date (last activity date)
         pushed_at_str = repo.get("pushed_at") or repo.get("updated_at")
         if not pushed_at_str:
             continue
-
+        if repo.get("size", 0) == 0:
+            continue
         commit_date = datetime.fromisoformat(
             pushed_at_str.replace("Z", "+00:00")
         ).date()
+        candidates.append((repo["name"], commit_date))
 
-        # Skip repos with no commits (forks with no activity, etc.)
-        if repo.get("size", 0) == 0:
-            continue
+    if not candidates:
+        return []
 
-        # Get commit count
-        try:
-            commit_count = _get_repo_commit_count(username, repo_name)
-        except Exception:
-            commit_count = 1  # safe fallback
-
-        if commit_count > 0:
-            records.append({
-                "repo_name":   repo_name,
-                "commits":     commit_count,
-                "commit_date": commit_date,
-            })
+    # Fetch commit counts for all repos in parallel — reduces N sequential
+    # HTTP calls (worst-case 100s) to ceil(N/5) batches (~3s for 10 repos).
+    records = []
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(_get_repo_commit_count, username, repo_name): (repo_name, commit_date)
+            for repo_name, commit_date in candidates
+        }
+        for future in as_completed(futures):
+            repo_name, commit_date = futures[future]
+            try:
+                commit_count = future.result()
+            except Exception:
+                commit_count = 1  # safe fallback
+            if commit_count > 0:
+                records.append({
+                    "repo_name":   repo_name,
+                    "commits":     commit_count,
+                    "commit_date": commit_date,
+                })
 
     return records
