@@ -60,6 +60,7 @@ def _make_problem_id(username: str, slug: str) -> str:
 def _synthesize_records(
     username: str,
     counts: dict,
+    real_by_difficulty: dict,
     existing_slugs: set,
     start_date: date,
     end_date: date,
@@ -72,20 +73,13 @@ def _synthesize_records(
     """
     records = []
     for difficulty, total_count in counts.items():
-        # Count how many of this difficulty are already covered by real submissions
-        already_covered = sum(
-            1 for slug in existing_slugs
-            if difficulty in slug  # rough heuristic, good enough
-        )
-        remaining = max(0, total_count - already_covered)
+        remaining = max(0, total_count - real_by_difficulty.get(difficulty, 0))
 
         for i in range(remaining):
-            # Spread dates randomly across the given range
             days_range = (end_date - start_date).days
             random_days = random.randint(0, max(0, days_range))
             solved_date = start_date + timedelta(days=random_days)
 
-            # Create a synthetic but unique problem_id
             problem_id = f"LC_{username[:8]}_{difficulty}_{i:04d}"[:50]
             if problem_id not in existing_slugs:
                 records.append({
@@ -212,7 +206,11 @@ def fetch_leetcode_data(username: str) -> list[dict]:
         seen_slugs.add(slug)
 
     # Synthesize remaining records to reach total count
-    synthetic = _synthesize_records(username, counts, seen_slugs, start_date, end_date)
+    real_by_difficulty = {"easy": 0, "medium": 0, "hard": 0}
+    for record in records:
+        real_by_difficulty[record["difficulty"]] += 1
+
+    synthetic = _synthesize_records(username, counts, real_by_difficulty, seen_slugs, start_date, end_date)
     records.extend(synthetic)
 
     return records

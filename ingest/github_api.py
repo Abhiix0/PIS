@@ -5,14 +5,14 @@ from datetime import datetime, date
 from typing import Optional
 
 GITHUB_API_BASE = "https://api.github.com"
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 
 def _get_headers() -> dict:
     """Return auth headers. Works without token but rate-limited to 60 req/hr."""
+    token = os.getenv("GITHUB_TOKEN", "")  # read on every call — never stale
     headers = {"Accept": "application/vnd.github.v3+json"}
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"token {GITHUB_TOKEN}"
+    if token:
+        headers["Authorization"] = f"token {token}"
     return headers
 
 

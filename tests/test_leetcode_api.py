@@ -66,3 +66,44 @@ def test_fetch_leetcode_api_timeout():
     with patch("requests.post", side_effect=req_lib.exceptions.Timeout):
         with pytest.raises(RuntimeError, match="timed out"):
             fetch_leetcode_data("anyuser")
+
+
+def test_no_over_generation_when_real_submissions_exist():
+    """Regression test for the _synthesize_records over-generation bug.
+
+    User has solved 5 easy + 4 medium + 1 hard = 10 total.
+    API returns 1 real accepted submission (two-sum).
+    Total records must be exactly 10, not 20.
+    """
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "data": {
+            "matchedUser": {
+                "username": "testuser",
+                "submitStats": {
+                    "acSubmissionNum": [
+                        {"difficulty": "All",    "count": 10},
+                        {"difficulty": "Easy",   "count": 5},
+                        {"difficulty": "Medium", "count": 4},
+                        {"difficulty": "Hard",   "count": 1},
+                    ]
+                }
+            },
+            "recentSubmissionList": [
+                {
+                    "titleSlug": "two-sum",
+                    "timestamp": "1700000000",
+                    "statusDisplay": "Accepted",
+                    "lang": "python3",
+                },
+            ]
+        }
+    }
+    with patch("requests.post", return_value=mock_response):
+        records = fetch_leetcode_data("testuser")
+
+    assert len(records) == 10, (
+        f"Expected exactly 10 records (matching total solved), got {len(records)}. "
+        "Over-generation bug may have returned."
+    )

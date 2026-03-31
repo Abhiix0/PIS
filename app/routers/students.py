@@ -87,7 +87,7 @@ def get_student_status(student_id: int, db: Session = Depends(get_db)):
     if prediction_exists:
         stage = "complete"
     elif features_computed:
-        stage = "predicted"
+        stage = "features_computed"
     else:
         stage = "no_data"
 
