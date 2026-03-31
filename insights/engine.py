@@ -1,8 +1,7 @@
 import json
-import psycopg2
 import pandas as pd
-from pathlib      import Path
-from config        import DATABASE_URL
+from pathlib        import Path
+from ingest.db_connection import get_connection
 from insights.rules import RULES
 
 IMPORTANCES_PATH = Path('models/feature_importances.json')
@@ -47,11 +46,8 @@ class InsightEngine:
             LEFT JOIN predictions p ON s.id = p.student_id
             WHERE  s.id = %(sid)s
         """
-        conn = psycopg2.connect(DATABASE_URL)
-        try:
+        with get_connection() as conn:
             df = pd.read_sql(query, conn, params={'sid': student_id})
-        finally:
-            conn.close()
         if df.empty:
             raise ValueError(
                 f"Student {student_id} not found or has no features computed. "

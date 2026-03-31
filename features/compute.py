@@ -1,8 +1,7 @@
 import pandas as pd
-import psycopg2
 from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
-from config import DATABASE_URL
+from ingest.db_connection import get_connection
 
 SQL_PATH        = Path("sql/feature_engineering.sql")
 SQL_SINGLE_PATH = Path("sql/feature_engineering_single.sql")
@@ -21,14 +20,10 @@ def run_feature_sql():
     O(n_students) — scans all rows in coding_activity and github_activity.
     """
     sql = SQL_PATH.read_text()
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(sql)
-        print("Feature SQL executed — features table updated.")
-    finally:
-        conn.close()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+    print("Feature SQL executed — features table updated.")
 
 
 def run_feature_sql_for_student(student_id: int):
@@ -37,14 +32,10 @@ def run_feature_sql_for_student(student_id: int):
     O(1) — only touches rows for this student_id.
     """
     sql = SQL_SINGLE_PATH.read_text()
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, {"student_id": student_id})
-        print(f"Feature SQL executed — student {student_id} features updated.")
-    finally:
-        conn.close()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, {"student_id": student_id})
+    print(f"Feature SQL executed — student {student_id} features updated.")
 
 def load_features() -> pd.DataFrame:
     """Pull features + cgpa from DB into a single DataFrame."""
@@ -62,11 +53,8 @@ def load_features() -> pd.DataFrame:
         JOIN  features  f ON s.id = f.student_id
         ORDER BY s.id
     """
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
+    with get_connection() as conn:
         df = pd.read_sql(query, conn)
-    finally:
-        conn.close()
     return df
 
 def scale_features(df: pd.DataFrame) -> pd.DataFrame:

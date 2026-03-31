@@ -1,9 +1,8 @@
 import joblib
 import pandas as pd
-import psycopg2
 from pathlib  import Path
 from datetime import datetime
-from config   import DATABASE_URL
+from ingest.db_connection import get_connection
 
 FEATURE_COLS = [
     'cgpa', 'total_problems', 'avg_difficulty',
@@ -31,11 +30,8 @@ def _fetch_scaled_features(student_id: int) -> pd.DataFrame:
         JOIN  features  f ON s.id = f.student_id
         WHERE s.id = %(student_id)s
     """
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
+    with get_connection() as conn:
         df = pd.read_sql(query, conn, params={'student_id': student_id})
-    finally:
-        conn.close()
 
     if df.empty:
         raise ValueError(f"No features found for student_id={student_id}. "
@@ -69,22 +65,18 @@ def predict(student_id: int) -> dict:
 
 def _save_prediction(student_id: int, score: float, category: str):
     """Upsert prediction into DB."""
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO predictions
-                        (student_id, readiness_score, category, last_updated)
-                    VALUES
-                        (%(sid)s, %(score)s, %(cat)s, NOW())
-                    ON CONFLICT (student_id) DO UPDATE SET
-                        readiness_score = EXCLUDED.readiness_score,
-                        category        = EXCLUDED.category,
-                        last_updated    = NOW()
-                """, {'sid': student_id, 'score': score, 'cat': category})
-    finally:
-        conn.close()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO predictions
+                    (student_id, readiness_score, category, last_updated)
+                VALUES
+                    (%(sid)s, %(score)s, %(cat)s, NOW())
+                ON CONFLICT (student_id) DO UPDATE SET
+                    readiness_score = EXCLUDED.readiness_score,
+                    category        = EXCLUDED.category,
+                    last_updated    = NOW()
+            """, {'sid': student_id, 'score': score, 'cat': category})
 
 if __name__ == "__main__":
     # Predict for all 8 students and print results
