@@ -1,16 +1,16 @@
 {
   "regressor": {
-    "cgpa": 0.21978660759031027,
-    "total_problems": 0.22204757929745256,
-    "avg_difficulty": 0.17241809115823487,
-    "consistency_score": 0.17703017753041375,
-    "commit_frequency": 0.20871754442358853
+    "cgpa": 0.11458419800658552,
+    "total_problems": 0.26350422563043535,
+    "avg_difficulty": 0.21003653943627845,
+    "consistency_score": 0.19403155617831733,
+    "commit_frequency": 0.21784348074838333
   },
   "classifier": {
-    "cgpa": 0.25028409090909093,
-    "total_problems": 0.22124368686868692,
-    "avg_difficulty": 0.20546085858585858,
-    "consistency_score": 0.1408459595959596,
-    "commit_frequency": 0.18216540404040404
+    "cgpa": 0.13001893939393938,
+    "total_problems": 0.24349747474747477,
+    "avg_difficulty": 0.25375631313131314,
+    "consistency_score": 0.15741792929292933,
+    "commit_frequency": 0.2153093434343435
   }
 }

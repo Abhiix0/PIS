@@ -1,3 +1,4 @@
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -26,9 +27,10 @@ def test_get_nonexistent_student_returns_404():
     assert "not found" in r.json()["detail"].lower()
 
 def test_create_student_normalises_branch():
+    unique_email = f"pytest_{uuid.uuid4().hex[:8]}@pis.dev"
     payload = {
         "name":   "Test Student",
-        "email":  "pytest_unique@pis.dev",
+        "email":  unique_email,
         "cgpa":   7.5,
         "branch": "cse"   # lowercase → should normalise to "CSE"
     }

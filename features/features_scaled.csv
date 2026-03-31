@@ -1,9 +1,10 @@
 student_id,name,branch,cgpa,total_problems,avg_difficulty,consistency_score,commit_frequency
-1,Aryan Mehta,CSE,1.0,1.0,1.0,1.0,0.2799
-2,Priya Sharma,CSE,0.8788,0.8467,0.8718,1.0,0.5382
-3,Rohan Das,IT,0.6061,0.58,0.7692,1.0,0.0431
-4,Sneha Iyer,IT,0.4242,0.5133,0.7521,1.0,0.027
-5,Karan Patel,ECE,0.3333,0.1133,0.3248,0.374,1.0
-6,Divya Nair,ECE,0.5152,0.1467,0.3504,0.7496,0.6363
-7,Amit Roy,MECH,0.0,0.0,0.1624,0.1252,0.0139
-8,Fatima Khan,MECH,0.0909,0.02,0.0,0.0,0.0
+1,Aryan Mehta,CSE,1.0,1.0,1.0,1.0,0.2825
+2,Priya Sharma,CSE,0.8788,0.8589,0.9364,1.0,0.5384
+3,Rohan Das,IT,0.6061,0.6135,0.8856,1.0,0.0431
+4,Sneha Iyer,IT,0.4242,0.5521,0.8771,1.0,0.027
+5,Karan Patel,ECE,0.3333,0.184,0.6653,0.615,1.0
+6,Divya Nair,ECE,0.5152,0.2147,0.678,0.846,0.6368
+7,Amit Roy,MECH,0.0,0.0798,0.5847,0.462,0.0141
+8,Fatima Khan,MECH,0.0909,0.0982,0.5042,0.385,0.0
+9,Test Student,CSE,0.5152,0.0,0.0,0.0,0.0
