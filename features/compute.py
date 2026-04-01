@@ -3,10 +3,12 @@ from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
 from ingest.db_connection import get_connection
 
-SQL_PATH        = Path("sql/feature_engineering.sql")
-SQL_SINGLE_PATH = Path("sql/feature_engineering_single.sql")
-FEATURES_CSV    = Path("features/features_scaled.csv")
-RAW_CSV         = Path("features/features_raw.csv")
+_ROOT = Path(__file__).parent.parent
+
+SQL_PATH        = _ROOT / "sql" / "feature_engineering.sql"
+SQL_SINGLE_PATH = _ROOT / "sql" / "feature_engineering_single.sql"
+FEATURES_CSV    = _ROOT / "features" / "features_scaled.csv"
+RAW_CSV         = _ROOT / "features" / "features_raw.csv"
 
 # Columns that will be scaled — cgpa included because ML needs it normalized
 SCALE_COLS = [
