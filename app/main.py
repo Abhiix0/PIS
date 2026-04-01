@@ -9,7 +9,7 @@ from sqlalchemy.orm    import Session
 
 from app.db     import check_db_connection, get_db
 from app.logger import logger
-from app.routers import students, ingest, predictions, insights, features, pipeline
+from app.routers import students, ingest, predictions, insights, features, pipeline, admin
 
 REQUIRED_MODEL_FILES = [
     Path("models/regressor.pkl"),
@@ -37,6 +37,7 @@ app.include_router(predictions.router)
 app.include_router(insights.router)
 app.include_router(features.router, prefix="/features", tags=["features"])
 app.include_router(pipeline.router)
+app.include_router(admin.router)
 
 # ── Startup validation ────────────────────────────────────────────────
 @app.on_event("startup")

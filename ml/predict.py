@@ -79,12 +79,17 @@ def _save_prediction(student_id: int, score: float, category: str):
                     category        = EXCLUDED.category,
                     last_updated    = NOW()
             """, {'sid': student_id, 'score': score, 'cat': category})
-            # Always append to history — never upsert, never delete
+            # Append to history at most once per hour — prevents rapid /predict
+            # calls from flooding the table and corrupting 7-day velocity logic.
             cur.execute("""
                 INSERT INTO prediction_history
                     (student_id, readiness_score, category, recorded_at)
-                VALUES
-                    (%(sid)s, %(score)s, %(cat)s, NOW())
+                SELECT %(sid)s, %(score)s, %(cat)s, NOW()
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM prediction_history
+                    WHERE  student_id = %(sid)s
+                      AND  recorded_at > NOW() - INTERVAL '1 hour'
+                )
             """, {'sid': student_id, 'score': score, 'cat': category})
 
 if __name__ == "__main__":

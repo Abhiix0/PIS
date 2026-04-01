@@ -1,6 +1,7 @@
 from datetime import date
 
 VALID_DIFFICULTIES = {'easy', 'medium', 'hard'}
+_LEETCODE_EPOCH = date(2015, 1, 1)  # LeetCode launched 2015; nothing before this is valid
 
 def validate_coding_record(record: dict) -> None:
     """Raises ValueError if the record is invalid."""
@@ -14,8 +15,14 @@ def validate_coding_record(record: dict) -> None:
             f"got: {record.get('difficulty')}"
         )
     solved = record.get('solved_at')
-    if solved and solved > date.today():
-        raise ValueError(f"solved_at cannot be a future date: {solved}")
+    if solved:
+        if solved > date.today():
+            raise ValueError(f"solved_at cannot be a future date: {solved}")
+        if solved < _LEETCODE_EPOCH:
+            raise ValueError(
+                f"solved_at {solved} is before 2015-01-01 — "
+                "unrealistic for any coding platform data"
+            )
 
 def validate_github_record(record: dict) -> None:
     """Raises ValueError if the record is invalid."""

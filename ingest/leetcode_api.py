@@ -165,9 +165,13 @@ def fetch_leetcode_data(username: str) -> list[dict]:
     records = []
     seen_slugs = set()
 
-    # Date range for spreading synthesized records
+    # Date range for spreading synthesized records.
+    # Use the earliest real submission date as the lower bound so synthesized
+    # records don't artificially inflate consistency_score by spreading across
+    # a full year when the user only started recently.
     end_date   = date.today()
-    start_date = end_date - timedelta(days=365)  # last 1 year
+    start_date = end_date - timedelta(days=365)  # fallback; overridden after real submissions
+    real_dates = []
 
     total = max(1, total_solved)
 
@@ -218,6 +222,12 @@ def fetch_leetcode_data(username: str) -> list[dict]:
         })
         seen_slugs.add(problem_id)
         seen_slugs.add(slug)
+        real_dates.append(solved_date)
+
+    # Tighten synthesis start to earliest real submission date — prevents
+    # uniform 365-day spread from inflating consistency_score artificially.
+    if real_dates:
+        start_date = min(real_dates)
 
     # Synthesize remaining records to reach total count
     real_by_difficulty = {"easy": 0, "medium": 0, "hard": 0}

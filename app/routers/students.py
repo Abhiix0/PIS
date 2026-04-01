@@ -2,7 +2,7 @@ from fastapi        import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy     import text
 from app.db         import get_db
-from app.schemas    import StudentCreate, StudentResponse, StudentListItem, StudentStatus
+from app.schemas    import StudentCreate, StudentResponse, StudentListItem, StudentStatus, PredictionHistoryItem
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -106,3 +106,22 @@ def get_student_status(student_id: int, db: Session = Depends(get_db)):
         "prediction_updated":   d.get("prediction_updated"),
         "pipeline_stage":       stage,
     }
+
+
+@router.get("/{student_id}/history", response_model=list[PredictionHistoryItem])
+def get_student_history(student_id: int, db: Session = Depends(get_db)):
+    """Return the last 30 prediction history records for a student."""
+    row = db.execute(
+        text("SELECT id FROM students WHERE id = :id"), {"id": student_id}
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
+
+    rows = db.execute(text("""
+        SELECT readiness_score, category, recorded_at
+        FROM   prediction_history
+        WHERE  student_id = :id
+        ORDER  BY recorded_at DESC
+        LIMIT  30
+    """), {"id": student_id}).fetchall()
+    return [dict(r._mapping) for r in rows]

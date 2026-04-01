@@ -75,17 +75,19 @@ class CompositeInsight(BaseModel):
 
 
 class InsightResponse(BaseModel):
-    student_id:         int
-    student_name:       str
-    readiness_score:    Optional[float]
-    category:           Optional[str]
-    score_delta_7d:     Optional[float] = None   # change vs 7 days ago
-    score_trend:        Optional[str]   = None   # "↑ improving fast" etc.
-    strengths:          list[StrengthItem]
-    weaknesses:         list[WeaknessItem]
-    composite_insights: list[CompositeInsight] = []
-    recommendations:    list[RecommendationItem]
-    top_priority:       str
+    student_id:          int
+    student_name:        str
+    readiness_score:     Optional[float]
+    category:            Optional[str]
+    score_delta_7d:      Optional[float] = None
+    score_trend:         Optional[str]   = None
+    features_age_hours:  Optional[float] = None
+    features_stale:      bool            = False
+    strengths:           list[StrengthItem]
+    weaknesses:          list[WeaknessItem]
+    composite_insights:  list[CompositeInsight] = []
+    recommendations:     list[RecommendationItem]
+    top_priority:        str
 
 class RankingItem(BaseModel):
     global_rank:     int
@@ -118,22 +120,22 @@ class PipelineStep(BaseModel):
 
 
 class PipelineResponse(BaseModel):
-    # All InsightResponse fields
-    student_id:         int
-    student_name:       str
-    readiness_score:    Optional[float]
-    category:           Optional[str]
-    score_delta_7d:     Optional[float] = None
-    score_trend:        Optional[str]   = None
-    strengths:          list[StrengthItem]
-    weaknesses:         list[WeaknessItem]
-    composite_insights: list[CompositeInsight] = []
-    recommendations:    list[RecommendationItem]
-    top_priority:       str
-    # Pipeline metadata
-    pipeline_steps:    list[PipelineStep]
-    total_duration_ms: float
-    ran_at:            str
+    student_id:          int
+    student_name:        str
+    readiness_score:     Optional[float]
+    category:            Optional[str]
+    score_delta_7d:      Optional[float] = None
+    score_trend:         Optional[str]   = None
+    features_age_hours:  Optional[float] = None
+    features_stale:      bool            = False
+    strengths:           list[StrengthItem]
+    weaknesses:          list[WeaknessItem]
+    composite_insights:  list[CompositeInsight] = []
+    recommendations:     list[RecommendationItem]
+    top_priority:        str
+    pipeline_steps:      list[PipelineStep]
+    total_duration_ms:   float
+    ran_at:              str
 
 
 class StudentListItem(BaseModel):
@@ -165,3 +167,9 @@ class StudentStatus(BaseModel):
 
 class BatchPipelineRequest(BaseModel):
     student_ids: list[int] = Field(..., min_length=1, max_length=20)
+
+
+class PredictionHistoryItem(BaseModel):
+    readiness_score: float
+    category:        str
+    recorded_at:     datetime

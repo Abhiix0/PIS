@@ -3,23 +3,30 @@ from psycopg2 import pool
 from contextlib import contextmanager
 from config import DATABASE_URL
 
-# Shared pool for all psycopg2 callers (ingest, features, ml, insights).
-# minconn=1 keeps one connection warm; maxconn=5 caps psycopg2 usage well
-# below Postgres's default max_connections=100 and leaves headroom for the
-# SQLAlchemy pool (pool_size=5) used by the FastAPI layer.
-_pool = pool.ThreadedConnectionPool(minconn=1, maxconn=5, dsn=DATABASE_URL)
+# Lazy-initialized pool — created on first use, not at import time.
+# Prevents crash when DATABASE_URL is not yet loaded (e.g. test collection).
+_pool: pool.ThreadedConnectionPool | None = None
+
+
+def _get_pool() -> pool.ThreadedConnectionPool:
+    global _pool
+    if _pool is None:
+        if not DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL is not set. "
+                "Check your .env file or environment variables."
+            )
+        # maxconn=20 handles concurrent batch pipeline requests safely.
+        # SQLAlchemy pool uses up to 15 (pool_size=5 + max_overflow=10),
+        # leaving 65+ connections free under Postgres default max_connections=100.
+        _pool = pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL)
+    return _pool
 
 
 @contextmanager
 def get_connection():
-    """Borrow a connection from the pool, commit on success, rollback on error.
-
-    Usage:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(...)
-    """
-    conn = _pool.getconn()
+    """Borrow a connection from the pool, commit on success, rollback on error."""
+    conn = _get_pool().getconn()
     try:
         yield conn
         conn.commit()
@@ -27,4 +34,4 @@ def get_connection():
         conn.rollback()
         raise
     finally:
-        _pool.putconn(conn)
+        _get_pool().putconn(conn)

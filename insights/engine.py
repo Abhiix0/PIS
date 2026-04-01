@@ -37,6 +37,8 @@ class InsightEngine:
             'category':           data['category'],
             'score_delta_7d':     delta,
             'score_trend':        trend,
+            'features_age_hours': data.get('features_age_hours'),
+            'features_stale':     (data.get('features_age_hours') or 0) > 24,
             'strengths':          result['strengths'],
             'weaknesses':         ranked,
             'composite_insights': composites,
@@ -52,6 +54,7 @@ class InsightEngine:
             SELECT s.name, s.cgpa,
                    f.total_problems, f.avg_difficulty,
                    f.consistency_score, f.commit_frequency,
+                   f.computed_at AS features_computed_at,
                    p.readiness_score, p.category
             FROM   students s
             JOIN   features f ON s.id = f.student_id
@@ -69,6 +72,20 @@ class InsightEngine:
         if row['readiness_score'] is not None:
             row['readiness_score'] = float(row['readiness_score'])
         row['category'] = row['category'] if row['category'] else 'Unknown'
+
+        # Compute feature freshness in hours
+        computed_at = row.get('features_computed_at')
+        if computed_at is not None and not pd.isnull(computed_at):
+            from datetime import timezone
+            now = pd.Timestamp.now(tz='UTC')
+            if hasattr(computed_at, 'tzinfo') and computed_at.tzinfo is None:
+                computed_at = pd.Timestamp(computed_at).tz_localize('UTC')
+            else:
+                computed_at = pd.Timestamp(computed_at)
+            row['features_age_hours'] = round((now - computed_at).total_seconds() / 3600, 1)
+        else:
+            row['features_age_hours'] = None
+
         return row
 
     def _fetch_score_velocity(

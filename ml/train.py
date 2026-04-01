@@ -109,16 +109,35 @@ def print_feature_importances(model, feature_names, label: str):
         print(f"    {name:<22} {score:.3f}  {bar}")
 
 def export_importances(regressor, classifier, feature_names):
-    """Save feature importances as JSON for Phase 5 Insight Engine."""
+    """Save feature importances as JSON for Phase 5 Insight Engine.
+    Logs a warning if any feature's importance shifted by > 0.1 vs previous run.
+    """
     reg_imp = dict(zip(feature_names, regressor.feature_importances_.tolist()))
     clf_imp = dict(zip(feature_names, classifier.feature_importances_.tolist()))
 
-    output = {
-        'regressor': reg_imp,
-        'classifier': clf_imp,
-    }
-    
+    output = {'regressor': reg_imp, 'classifier': clf_imp}
+
     path = MODELS_DIR / 'feature_importances.json'
+
+    # Drift detection — compare against previous importances if they exist
+    if path.exists():
+        try:
+            old = json.loads(path.read_text())
+            old_reg = old.get('regressor', {})
+            drifted = [
+                f"{feat}: {old_reg[feat]:.3f} → {reg_imp[feat]:.3f}"
+                for feat in reg_imp
+                if feat in old_reg and abs(reg_imp[feat] - old_reg[feat]) > 0.1
+            ]
+            if drifted:
+                print(f"\n⚠️  Feature importance drift detected (Δ > 0.1):")
+                for d in drifted:
+                    print(f"    {d}")
+            else:
+                print("\n✅ Feature importances stable (no drift > 0.1)")
+        except Exception:
+            pass  # don't fail training on drift check errors
+
     path.write_text(json.dumps(output, indent=2))
     print(f"\n✅ All-in-one Bridge Saved → {path}")
     return output
