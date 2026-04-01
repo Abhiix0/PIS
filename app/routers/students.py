@@ -89,12 +89,17 @@ def get_student_status(student_id: int):
     features_computed = d.get("features_computed_at") is not None
     prediction_exists = d.get("readiness_score") is not None
 
-    if prediction_exists:
-        stage = "complete"
-    elif features_computed:
+    if not features_computed:
+        stage = "no_data"
+    elif not prediction_exists:
         stage = "features_computed"
     else:
-        stage = "no_data"
+        pred_updated = d.get("prediction_updated")
+        feat_computed = d.get("features_computed_at")
+        if pred_updated and feat_computed and pred_updated >= feat_computed:
+            stage = "complete"
+        else:
+            stage = "predicted"
 
     return {
         "student_id":           student_id,
