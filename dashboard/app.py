@@ -257,7 +257,7 @@ def section_title(text: str):
     st.markdown(f'<p class="section-title">{text}</p>', unsafe_allow_html=True)
 
 
-def render_radar_chart(features: dict, student_name: str):
+def render_radar_chart(features: dict, student_name: str, cgpa: float = 0.0):
     MAX_PROBLEMS = 200; MAX_DIFFICULTY = 3.0; MAX_CONSISTENCY = 1.0
     MAX_COMMIT_FREQ = 2.0; MAX_CGPA = 10.0
 
@@ -265,7 +265,7 @@ def render_radar_chart(features: dict, student_name: str):
     raw_difficulty  = features.get("avg_difficulty", 0)
     raw_consistency = features.get("consistency_score", 0)
     raw_commit_freq = features.get("commit_frequency", 0)
-    raw_cgpa        = features.get("cgpa", 0) if "cgpa" in features else 0
+    raw_cgpa        = cgpa
 
     values = [
         min(raw_problems    / MAX_PROBLEMS,    1.0),
@@ -325,6 +325,19 @@ def render_insight(result: dict, show_pipeline_steps: bool = False):
             st.warning(f"**Top Priority:** {top}")
         else:
             st.success("No critical gaps detected — student is well-prepared!")
+
+    # ── Company tier ───────────────────────────────────────────────────
+    company_tier = result.get("company_tier")
+    if company_tier:
+        with st.container(border=True):
+            tier_col1, tier_col2 = st.columns([2, 3])
+            with tier_col1:
+                st.markdown("**🏢 Target Companies**")
+                st.markdown(f"**{company_tier['tier']}**")
+                st.caption(company_tier["focus"])
+            with tier_col2:
+                st.markdown("**Examples:**")
+                st.markdown("  ".join(f"`{c}`" for c in company_tier["examples"]))
 
     if stale:
         st.warning(f"⚠️ Features were computed {result.get('features_age_hours',0):.0f}h ago.")
@@ -520,6 +533,45 @@ elif page == "Student Dashboard":
                 except Exception as e:
                     st.error(f"Force refresh failed: {e}")
 
+    # ── Edit profile ───────────────────────────────────────────────────
+    with st.expander("✏️ Edit Username / CGPA"):
+        try:
+            from api_client import update_student
+        except ImportError:
+            update_student = None
+        edit_col1, edit_col2, edit_col3 = st.columns(3)
+        with edit_col1:
+            new_github = st.text_input(
+                "GitHub Username",
+                value=selected_student.get("github_username") or "",
+                key="edit_github",
+            )
+        with edit_col2:
+            new_leetcode = st.text_input(
+                "LeetCode Username",
+                value=selected_student.get("leetcode_username") or "",
+                key="edit_leetcode",
+            )
+        with edit_col3:
+            new_cgpa = st.number_input(
+                "CGPA", 0.0, 10.0,
+                value=float(selected_student.get("cgpa", 7.5)),
+                step=0.1, key="edit_cgpa",
+            )
+        if st.button("Save Changes", key="save_profile") and update_student:
+            payload = {}
+            if new_github.strip():
+                payload["github_username"] = new_github.strip()
+            if new_leetcode.strip():
+                payload["leetcode_username"] = new_leetcode.strip()
+            payload["cgpa"] = new_cgpa
+            try:
+                update_student(selected_id, payload)
+                st.success("Profile updated! Run pipeline to apply changes.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Update failed: {e}")
+
     # ── Load data ──────────────────────────────────────────────────────
     try:
         insight = get_insights(selected_id)
@@ -605,7 +657,7 @@ elif page == "Student Dashboard":
         if features:
             st.markdown('<div class="pis-card">', unsafe_allow_html=True)
             section_title("🕸️ Skill Profile")
-            render_radar_chart(features, student_name)
+            render_radar_chart(features, student_name, cgpa=float(selected_student.get("cgpa") or 0))
             st.markdown('</div>', unsafe_allow_html=True)
     except Exception:
         pass

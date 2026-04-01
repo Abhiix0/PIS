@@ -22,6 +22,30 @@ class InsightEngine:
                             "before any technical evaluation.",
     }
 
+    _COMPANY_TIERS = [
+        (80, 100, "Tier 1 Product Companies",
+         ["Google", "Microsoft", "Amazon", "Adobe", "Flipkart"],
+         "Focus on system design rounds and advanced DSA patterns."),
+        (65,  79, "Mid-tier Product + Service Companies",
+         ["Samsung", "Walmart Labs", "Paytm", "Razorpay", "Swiggy"],
+         "Core DSA + one strong full-stack project will differentiate you."),
+        (45,  64, "Service Companies + Growing Startups",
+         ["Wipro Digital", "Infosys", "Capgemini", "TCS Digital", "HCL Tech"],
+         "Aptitude + basic programming + communication skills are the focus."),
+        ( 0,  44, "Entry-level / Upskilling Required",
+         ["Internships", "Contract roles", "Bootcamp placement"],
+         "Build fundamentals first. Target internships before full-time."),
+    ]
+
+    def _get_company_tier(self, score: float | None) -> dict | None:
+        """Return the company tier matching the readiness score."""
+        if score is None:
+            return None
+        for low, high, tier_name, examples, focus in self._COMPANY_TIERS:
+            if low <= score <= high:
+                return {"tier": tier_name, "examples": examples, "focus": focus}
+        return None
+
     def __init__(self):
         # Load importances once at instantiation — not on every call
         raw = json.loads(IMPORTANCES_PATH.read_text())
@@ -48,6 +72,7 @@ class InsightEngine:
             'student_name':       data['name'],
             'readiness_score':    data['readiness_score'],
             'category':           data['category'],
+            'company_tier':       self._get_company_tier(data.get('readiness_score')),
             'score_delta_7d':     delta,
             'score_trend':        trend,
             'features_age_hours': data.get('features_age_hours'),

@@ -1,16 +1,14 @@
-from fastapi         import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm  import Session
-from sqlalchemy      import text
+from fastapi         import APIRouter, HTTPException, Query
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from app.db          import get_db
 from app.schemas     import PipelineResponse, BatchPipelineRequest
+from ingest.db_connection import get_connection
 from services.pipeline import run as run_pipeline
 
 router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
 
 
 @router.post("/batch", response_model=list[PipelineResponse])
-def run_batch_pipeline(body: BatchPipelineRequest, db: Session = Depends(get_db)):
+def run_batch_pipeline(body: BatchPipelineRequest):
     """Run the full pipeline for multiple students.
 
     Processes up to 3 students concurrently.
@@ -44,23 +42,20 @@ def run_batch_pipeline(body: BatchPipelineRequest, db: Session = Depends(get_db)
             sid, result = future.result()
             results_map[sid] = result
 
-    # Return in original request order
     return [results_map[sid] for sid in body.student_ids]
 
 
 @router.post("/{student_id}", response_model=PipelineResponse)
 def run_full_pipeline(
     student_id:    int,
-    db:            Session = Depends(get_db),
-    force_refresh: bool    = Query(False, description="Bypass 24h cache and re-fetch from all APIs"),
+    force_refresh: bool = Query(False, description="Bypass 24h cache and re-fetch from all APIs"),
 ):
     """Run the full PIS pipeline for a student in one call."""
-    row = db.execute(
-        text("SELECT id FROM students WHERE id = :id"),
-        {"id": student_id}
-    ).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM students WHERE id = %s", (student_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
 
     try:
         result = run_pipeline(student_id, force_refresh=force_refresh)

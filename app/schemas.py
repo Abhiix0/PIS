@@ -74,11 +74,18 @@ class CompositeInsight(BaseModel):
     action:  str
 
 
+class CompanyTier(BaseModel):
+    tier:     str
+    examples: list[str]
+    focus:    str
+
+
 class InsightResponse(BaseModel):
     student_id:          int
     student_name:        str
     readiness_score:     Optional[float]
     category:            Optional[str]
+    company_tier:        Optional[CompanyTier] = None
     score_delta_7d:      Optional[float] = None
     score_trend:         Optional[str]   = None
     features_age_hours:  Optional[float] = None
@@ -124,6 +131,7 @@ class PipelineResponse(BaseModel):
     student_name:        str
     readiness_score:     Optional[float]
     category:            Optional[str]
+    company_tier:        Optional[CompanyTier] = None
     score_delta_7d:      Optional[float] = None
     score_trend:         Optional[str]   = None
     features_age_hours:  Optional[float] = None

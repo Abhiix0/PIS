@@ -1,21 +1,19 @@
-# ADDED APIRouter to imports
-from fastapi      import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy     import text
-from app.db         import get_db
-from app.schemas   import FeatureResponse
+from fastapi     import APIRouter, HTTPException
+from app.schemas import FeatureResponse
+from ingest.db_connection import get_connection
 
 router = APIRouter(tags=["Features"])
 
 @router.get("/{student_id}", response_model=FeatureResponse)
-def get_features(student_id: int, db: Session = Depends(get_db)):
-    row = db.execute(
-        text("SELECT * FROM features WHERE student_id = :id"),
-        {"id": student_id}
-    ).fetchone()
-    if not row:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No features for student {student_id}. Run features/compute.py first."
-        )
-    return dict(row._mapping)
+def get_features(student_id: int):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM features WHERE student_id = %s", (student_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No features for student {student_id}. Run features/compute.py first."
+                )
+            cols = [desc[0] for desc in cur.description]
+            return dict(zip(cols, row))

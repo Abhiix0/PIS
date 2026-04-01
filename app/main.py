@@ -2,12 +2,10 @@ import os
 import time as time_module
 from pathlib import Path
 
-from fastapi           import FastAPI, Request, Depends
+from fastapi           import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy        import text
-from sqlalchemy.orm    import Session
 
-from app.db     import check_db_connection, get_db
+from ingest.db_connection import get_connection
 from app.logger import logger
 from app.routers import students, ingest, predictions, insights, features, pipeline, admin
 
@@ -38,6 +36,19 @@ app.include_router(insights.router)
 app.include_router(features.router, prefix="/features", tags=["features"])
 app.include_router(pipeline.router)
 app.include_router(admin.router)
+
+
+def check_db_connection() -> bool:
+    """Health check — called on startup to fail fast if DB is unreachable."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        return True
+    except Exception as e:
+        print(f"DB connection failed: {e}")
+        return False
+
 
 # ── Startup validation ────────────────────────────────────────────────
 @app.on_event("startup")
@@ -96,24 +107,27 @@ def health():
 
 
 @app.get("/health/detailed", tags=["System"])
-def health_detailed(db: Session = Depends(get_db)):
+def health_detailed():
     """Detailed health check showing system component status."""
     db_ok  = check_db_connection()
     models = {f.stem: f.exists() for f in REQUIRED_MODEL_FILES}
 
-    try:
-        row = db.execute(
-            text("SELECT MAX(computed_at) AS last_computed FROM features")
-        ).fetchone()
-        features_freshness = str(row._mapping["last_computed"]) if row else None
-    except Exception:
-        features_freshness = None
+    features_freshness = None
+    student_count      = 0
 
     try:
-        count_row     = db.execute(text("SELECT COUNT(*) AS n FROM students")).fetchone()
-        student_count = count_row._mapping["n"]
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(computed_at) FROM features")
+                row = cur.fetchone()
+                features_freshness = str(row[0]) if row and row[0] else None
+
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM students")
+                row = cur.fetchone()
+                student_count = row[0] if row else 0
     except Exception:
-        student_count = 0
+        pass
 
     uptime_seconds = round(time_module.time() - _startup_time)
 
