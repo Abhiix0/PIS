@@ -74,3 +74,7 @@ CREATE INDEX IF NOT EXISTS idx_features_covering
 -- Migration 001: platform usernames
 ALTER TABLE students ADD COLUMN IF NOT EXISTS github_username VARCHAR(100);
 ALTER TABLE students ADD COLUMN IF NOT EXISTS leetcode_username VARCHAR(100);
+
+-- Migration 002: API sync timestamps for staleness checks
+ALTER TABLE students ADD COLUMN IF NOT EXISTS github_last_synced   TIMESTAMPTZ;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS leetcode_last_synced TIMESTAMPTZ;
