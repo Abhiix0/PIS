@@ -108,16 +108,19 @@ def run(student_id: int, force_refresh: bool = False) -> dict:
             records = None
 
         if records is not None:
-            from ingest.db_connection import get_connection, clear_coding_activity
+            from ingest.db_connection import get_connection
             from ingest.validators import validate_coding_record
-            # Hard reset: remove legacy rows so inflated old data can't persist.
-            # Only clear when we have fresh real data to replace it with.
-            if data_source == "real_leetcode_stats":
-                clear_coding_activity(student_id)
-            print(f"[DEBUG] Inserting {len(records)} fresh records for student {student_id}")
             inserted = 0
             with get_connection() as conn:
                 cur = conn.cursor()
+                if data_source == "real_leetcode_stats":
+                    cur.execute(
+                        "DELETE FROM coding_activity WHERE student_id = %s",
+                        (student_id,)
+                    )
+                    deleted = cur.rowcount
+                    print(f"[DEBUG] Cleared {deleted} old coding_activity rows for student {student_id}")
+                print(f"[DEBUG] Inserting {len(records)} fresh records for student {student_id}")
                 for r in records:
                     rec = {"student_id": student_id, **r}
                     try:

@@ -103,6 +103,11 @@ def fetch_leetcode_data(username: str) -> tuple[list[dict], str]:
     SYNTHETIC_WEIGHT = 0.3
     records = []
 
+    # Namespace problem_ids by username so re-runs for the same student
+    # produce the same IDs (ON CONFLICT skips silently) rather than new IDs
+    # on top of a cleared table.
+    u = username[:8].replace("-", "_").replace(".", "_")
+
     for difficulty, count in counts.items():
         if count == 0:
             continue
@@ -113,7 +118,7 @@ def fetch_leetcode_data(username: str) -> tuple[list[dict], str]:
         # Real portion — deterministic timestamps cycling through last 30 days
         for i in range(real_count):
             records.append({
-                "problem_id": f"{difficulty}_real_{i:04d}",
+                "problem_id": f"{u}_{difficulty}_r{i:04d}",
                 "difficulty": difficulty,
                 "solved_at":  (datetime.now() - timedelta(days=i % 30)).date(),
             })
@@ -121,7 +126,7 @@ def fetch_leetcode_data(username: str) -> tuple[list[dict], str]:
         # Synthetic portion — random spread for consistency_score breadth
         for i in range(synthetic_count):
             records.append({
-                "problem_id": f"{difficulty}_syn_{i:04d}",
+                "problem_id": f"{u}_{difficulty}_s{i:04d}",
                 "difficulty": difficulty,
                 "solved_at":  (datetime.now() - timedelta(days=random.randint(0, 90))).date(),
             })
