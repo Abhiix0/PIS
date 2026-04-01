@@ -57,6 +57,29 @@ def run_full_pipeline(
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
 
+    # Cooldown guard — skip pipeline if features were computed < 5 minutes ago
+    # and force_refresh is not set
+    if not force_refresh:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT computed_at FROM features WHERE student_id = %s",
+                    (student_id,)
+                )
+                feat_row = cur.fetchone()
+        if feat_row and feat_row[0]:
+            from datetime import datetime, timezone, timedelta
+            computed_at = feat_row[0]
+            if computed_at.tzinfo is None:
+                computed_at = computed_at.replace(tzinfo=timezone.utc)
+            age = datetime.now(timezone.utc) - computed_at
+            if age < timedelta(minutes=5):
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Pipeline ran {int(age.total_seconds())}s ago. "
+                           f"Wait {300 - int(age.total_seconds())}s or use force_refresh=true."
+                )
+
     try:
         result = run_pipeline(student_id, force_refresh=force_refresh)
         return result
