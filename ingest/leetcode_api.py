@@ -5,7 +5,9 @@ from typing import Optional
 
 LEETCODE_GQL_URL = "https://leetcode.com/graphql"
 
-# GraphQL query to fetch user stats and recent submissions
+# GraphQL query to fetch user stats and recent submissions.
+# recentSubmissionList includes difficulty.level — the actual problem
+# difficulty returned by LeetCode, not a random assignment.
 PROFILE_QUERY = """
 query getUserProfile($username: String!) {
   matchedUser(username: $username) {
@@ -24,6 +26,9 @@ query getUserProfile($username: String!) {
     timestamp
     statusDisplay
     lang
+    difficulty {
+      level
+    }
   }
 }
 """
@@ -34,6 +39,9 @@ DIFFICULTY_MAP = {
     "Hard":   "hard",
     "All":    None,   # skip the "All" summary row
 }
+
+# difficulty.level from recentSubmissionList is an integer: 1=Easy, 2=Medium, 3=Hard
+_LEVEL_MAP = {1: "easy", 2: "medium", 3: "hard"}
 
 
 def _parse_submission_stats(stats: list) -> dict:
@@ -187,15 +195,21 @@ def fetch_leetcode_data(username: str) -> list[dict]:
         else:
             solved_date = end_date - timedelta(days=random.randint(0, 90))
 
-        # Assign difficulty based on proportion from stats
-        difficulty = random.choices(
-            ["easy", "medium", "hard"],
-            weights=[
-                counts["easy"] / total,
-                counts["medium"] / total,
-                max(counts["hard"], 0) / total,
-            ]
-        )[0]
+        # Use the actual problem difficulty returned by the API.
+        # difficulty.level is an int: 1=Easy, 2=Medium, 3=Hard.
+        # Fall back to proportional random assignment only if the field
+        # is absent (older API versions or unexpected schema changes).
+        level = (sub.get("difficulty") or {}).get("level")
+        difficulty = _LEVEL_MAP.get(level)
+        if difficulty is None:
+            difficulty = random.choices(
+                ["easy", "medium", "hard"],
+                weights=[
+                    counts["easy"] / total,
+                    counts["medium"] / total,
+                    max(counts["hard"], 0) / total,
+                ]
+            )[0]
 
         records.append({
             "problem_id": problem_id,
