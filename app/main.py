@@ -68,6 +68,11 @@ async def startup_checks():
             f"See logs above for details."
         )
 
+    admin_key = os.getenv("ADMIN_KEY", "")
+    if len(admin_key) < 16:
+        print(f"[STARTUP WARNING] ADMIN_KEY not set or too short. "
+              f"/admin endpoints are insecure.")
+
     print(f"PIS API v{app.version} started successfully")
     print(f"  Database: connected")
     print(f"  Models:   {len(REQUIRED_MODEL_FILES)} files verified")

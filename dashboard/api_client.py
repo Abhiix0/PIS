@@ -37,6 +37,16 @@ def get_student_history(student_id: int) -> list:
 def create_student(payload: dict) -> dict:
     return _post("/students", json=payload)
 
+def update_student(student_id: int, payload: dict) -> dict:
+    """PATCH a student's mutable fields (usernames, cgpa)."""
+    resp = requests.patch(
+        f"{API_BASE}/students/{student_id}",
+        json=payload,
+        timeout=TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
 def run_pipeline(student_id: int, force_refresh: bool = False) -> dict:
     params = {"force_refresh": "true"} if force_refresh else None
     return _post(f"/pipeline/{student_id}", params=params)

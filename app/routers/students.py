@@ -2,7 +2,7 @@ from fastapi        import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy     import text
 from app.db         import get_db
-from app.schemas    import StudentCreate, StudentResponse, StudentListItem, StudentStatus, PredictionHistoryItem
+from app.schemas    import StudentCreate, StudentResponse, StudentListItem, StudentStatus, PredictionHistoryItem, StudentUpdate
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -125,3 +125,36 @@ def get_student_history(student_id: int, db: Session = Depends(get_db)):
         LIMIT  30
     """), {"id": student_id}).fetchall()
     return [dict(r._mapping) for r in rows]
+
+
+@router.patch("/{student_id}", response_model=StudentResponse)
+def update_student(
+    student_id: int,
+    body:       StudentUpdate,
+    db:         Session = Depends(get_db),
+):
+    """Update a student's platform usernames and/or CGPA.
+    Only the fields provided in the request body are updated.
+    Email and branch cannot be changed after creation.
+    """
+    existing = db.execute(
+        text("SELECT id FROM students WHERE id = :id"),
+        {"id": student_id}
+    ).fetchone()
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
+
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="No fields provided to update.")
+
+    set_clauses = ", ".join(f"{col} = :{col}" for col in updates)
+    params = {**updates, "id": student_id}
+    db.execute(text(f"UPDATE students SET {set_clauses} WHERE id = :id"), params)
+    db.commit()
+
+    row = db.execute(
+        text("SELECT * FROM students WHERE id = :id"),
+        {"id": student_id}
+    ).fetchone()
+    return dict(row._mapping)

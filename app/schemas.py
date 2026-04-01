@@ -169,6 +169,12 @@ class BatchPipelineRequest(BaseModel):
     student_ids: list[int] = Field(..., min_length=1, max_length=20)
 
 
+class StudentUpdate(BaseModel):
+    github_username:   Optional[str]   = None
+    leetcode_username: Optional[str]   = None
+    cgpa:              Optional[float] = Field(None, ge=0.0, le=10.0)
+
+
 class PredictionHistoryItem(BaseModel):
     readiness_score: float
     category:        str

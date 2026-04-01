@@ -9,6 +9,19 @@ IMPORTANCES_PATH = Path('models/feature_importances.json')
 
 class InsightEngine:
 
+    _IMPORTANCE_EXPLANATIONS = {
+        'total_problems':   "Problem-solving volume is the strongest predictor of "
+                            "placement readiness — companies screen on quantity before quality.",
+        'avg_difficulty':   "Problem depth matters more than count at the screening stage — "
+                            "most interview questions are medium or hard difficulty.",
+        'consistency_score': "Sustained daily effort builds retention; recruiters value "
+                             "long-term consistency over burst preparation.",
+        'commit_frequency': "An active GitHub profile is a visible signal that recruiters "
+                            "evaluate before technical interviews.",
+        'cgpa':             "Academic GPA is used as a first-pass filter by many companies "
+                            "before any technical evaluation.",
+    }
+
     def __init__(self):
         # Load importances once at instantiation — not on every call
         raw = json.loads(IMPORTANCES_PATH.read_text())
@@ -233,7 +246,10 @@ class InsightEngine:
                 'tier':           tiers[min(i, len(tiers) - 1)],
                 'area':           w['label'],
                 'action':         w['recommendation'],
-                'why_it_matters': f"Feature importance: {w['importance']:.3f}",
+                'why_it_matters': self._IMPORTANCE_EXPLANATIONS.get(
+                    w['feature'],
+                    f"Importance score: {w['importance']:.3f}",
+                ),
             })
         return result
 
