@@ -1,5 +1,6 @@
 import os
 import time as time_module
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi           import FastAPI, Request
@@ -16,27 +17,6 @@ REQUIRED_MODEL_FILES = [
     Path("models/feature_importances.json"),
 ]
 
-app = FastAPI(
-    title="Placement Intelligence System",
-    version="1.0.0",
-    description="""
-    A data-driven platform that evaluates student placement readiness
-    using SQL feature engineering, ML prediction, and a hybrid
-    rule + ML insight engine.
-    """,
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
-
-# ── Register all routers ──────────────────────────────────────────────
-app.include_router(students.router)
-app.include_router(ingest.router)
-app.include_router(predictions.router)
-app.include_router(insights.router)
-app.include_router(features.router, prefix="/features", tags=["features"])
-app.include_router(pipeline.router)
-app.include_router(admin.router)
-
 
 def check_db_connection() -> bool:
     """Health check — called on startup to fail fast if DB is unreachable."""
@@ -50,9 +30,8 @@ def check_db_connection() -> bool:
         return False
 
 
-# ── Startup validation ────────────────────────────────────────────────
-@app.on_event("startup")
-async def startup_checks():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     errors = []
 
     if not os.getenv("DATABASE_URL"):
@@ -84,10 +63,36 @@ async def startup_checks():
         print(f"[STARTUP WARNING] ADMIN_KEY not set or too short. "
               f"/admin endpoints are insecure.")
 
-    print(f"PIS API v{app.version} started successfully")
+    print(f"PIS API started successfully")
     print(f"  Database: connected")
     print(f"  Models:   {len(REQUIRED_MODEL_FILES)} files verified")
     print(f"  Docs:     http://localhost:8000/docs")
+
+    yield
+
+
+app = FastAPI(
+    title="Placement Intelligence System",
+    version="1.0.0",
+    description="""
+    A data-driven platform that evaluates student placement readiness
+    using SQL feature engineering, ML prediction, and a hybrid
+    rule + ML insight engine.
+    """,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# ── Register all routers ──────────────────────────────────────────────
+app.include_router(students.router)
+app.include_router(ingest.router)
+app.include_router(predictions.router)
+app.include_router(insights.router)
+app.include_router(features.router, prefix="/features", tags=["features"])
+app.include_router(pipeline.router)
+app.include_router(admin.router)
+
 
 # ── Global exception handler — never leak raw tracebacks ─────────────
 @app.exception_handler(Exception)
