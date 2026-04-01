@@ -66,7 +66,7 @@ def _mark_synced(student_id: int, platform: str):
             )
 
 
-def run(student_id: int) -> dict:
+def run(student_id: int, force_refresh: bool = False) -> dict:
     """Run the full pipeline for one student.
 
     Returns a dict containing:
@@ -84,7 +84,7 @@ def run(student_id: int) -> dict:
     step_start = time.perf_counter()
     try:
         if usernames.get("leetcode_username"):
-            if _is_fresh(usernames.get("leetcode_last_synced")):
+            if _is_fresh(usernames.get("leetcode_last_synced")) and not force_refresh:
                 # Data fetched within TTL — skip API call, use existing DB rows
                 data_source = "cached"
                 records = None
@@ -92,8 +92,10 @@ def run(student_id: int) -> dict:
             else:
                 from ingest.leetcode_api import fetch_leetcode_data
                 try:
-                    records = fetch_leetcode_data(usernames["leetcode_username"])
-                    data_source = "real_leetcode_api"
+                    records, data_source = fetch_leetcode_data(usernames["leetcode_username"])
+                    if not records:
+                        data_source = "synthetic"
+                        records = None
                 except Exception as e:
                     print(f"[Pipeline] LeetCode API failed ({e}), using synthetic")
                     from ingest.coding import generate_coding_records, STUDENT_PROFILES
@@ -106,8 +108,13 @@ def run(student_id: int) -> dict:
             records = None
 
         if records is not None:
-            from ingest.db_connection import get_connection
+            from ingest.db_connection import get_connection, clear_coding_activity
             from ingest.validators import validate_coding_record
+            # Hard reset: remove legacy rows so inflated old data can't persist.
+            # Only clear when we have fresh real data to replace it with.
+            if data_source == "real_leetcode_stats":
+                clear_coding_activity(student_id)
+            print(f"[DEBUG] Inserting {len(records)} fresh records for student {student_id}")
             inserted = 0
             with get_connection() as conn:
                 cur = conn.cursor()
@@ -127,7 +134,7 @@ def run(student_id: int) -> dict:
                     if cur.rowcount == 1:
                         inserted += 1
             coding_result = {"inserted": inserted, "source": data_source}
-            if data_source == "real_leetcode_api":
+            if data_source == "real_leetcode_stats":
                 _mark_synced(student_id, "leetcode")
         elif data_source == "cached":
             coding_result = {"inserted": 0, "source": data_source}
@@ -153,7 +160,7 @@ def run(student_id: int) -> dict:
     step_start = time.perf_counter()
     try:
         if usernames.get("github_username"):
-            if _is_fresh(usernames.get("github_last_synced")):
+            if _is_fresh(usernames.get("github_last_synced")) and not force_refresh:
                 gh_records = None
                 gh_source = "cached"
                 gh_inserted = 0

@@ -1,4 +1,4 @@
-from fastapi        import APIRouter, HTTPException, Depends
+from fastapi        import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy     import text
 from datetime       import date, timedelta
@@ -13,7 +13,11 @@ from ingest.leetcode_api import fetch_leetcode_data
 router = APIRouter(prefix="/ingest", tags=["Ingestion"])
 
 @router.post("/coding/real/{student_id}", response_model=IngestResponse)
-def ingest_coding_real(student_id: int, db: Session = Depends(get_db)):
+def ingest_coding_real(
+    student_id:    int,
+    db:            Session = Depends(get_db),
+    force_refresh: bool    = Query(False, description="Bypass 24h cache and re-fetch from LeetCode API"),
+):
     """Fetch real LeetCode data for a student using their leetcode_username.
 
     Falls back to synthetic generation if:
@@ -21,7 +25,7 @@ def ingest_coding_real(student_id: int, db: Session = Depends(get_db)):
     - LeetCode API is unavailable
     - Username is not found or profile is private
     """
-    from ingest.db_connection import get_connection
+    from ingest.db_connection import get_connection, clear_coding_activity
     from ingest.validators import validate_coding_record
 
     row = db.execute(
@@ -38,14 +42,14 @@ def ingest_coding_real(student_id: int, db: Session = Depends(get_db)):
     # Try real API if username is set
     if leetcode_username:
         try:
-            raw_records = fetch_leetcode_data(leetcode_username)
+            raw_records, data_source = fetch_leetcode_data(leetcode_username)
             if raw_records:
                 records = raw_records
-                data_source = "real_leetcode_api"
                 print(f"[LeetCode] Fetched {len(records)} records for '{leetcode_username}'")
             else:
                 print(f"[LeetCode] No solved problems found for "
                       f"'{leetcode_username}', falling back to synthetic")
+                data_source = "synthetic"
         except ValueError as e:
             print(f"[LeetCode] Username error: {e}. Falling back to synthetic.")
         except RuntimeError as e:
@@ -70,9 +74,13 @@ def ingest_coding_real(student_id: int, db: Session = Depends(get_db)):
                     "solved_at":  start_date + timedelta(days=random.randint(0, 180)),
                 })
 
-    # Insert records
+    # Insert records — clear first if using real data OR force_refresh requested
     total_inserted = 0
     total_skipped  = 0
+
+    if (data_source == "real_leetcode_stats" or force_refresh) and records:
+        clear_coding_activity(student_id)
+        print(f"[DEBUG] Inserting {len(records)} fresh records for student {student_id}")
 
     with get_connection() as conn:
         cur = conn.cursor()

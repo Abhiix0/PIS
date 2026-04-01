@@ -35,3 +35,19 @@ def get_connection():
         raise
     finally:
         _get_pool().putconn(conn)
+
+
+def clear_coding_activity(student_id: int) -> int:
+    """Delete all coding_activity rows for a student and return the count removed.
+    Call this before inserting real LeetCode data so legacy inflated records
+    don't persist alongside the fresh correct set.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM coding_activity WHERE student_id = %s",
+                (student_id,)
+            )
+            deleted = cur.rowcount
+    print(f"[DEBUG] Cleared {deleted} old coding_activity rows for student {student_id}")
+    return deleted

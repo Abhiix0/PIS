@@ -1,4 +1,4 @@
-from fastapi         import APIRouter, Depends, HTTPException
+from fastapi         import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm  import Session
 from sqlalchemy      import text
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -49,18 +49,12 @@ def run_batch_pipeline(body: BatchPipelineRequest, db: Session = Depends(get_db)
 
 
 @router.post("/{student_id}", response_model=PipelineResponse)
-def run_full_pipeline(student_id: int, db: Session = Depends(get_db)):
-    """Run the full PIS pipeline for a student in one call.
-
-    Steps executed in sequence:
-    1. Ingest coding activity (real LeetCode API if leetcode_username set)
-    2. Ingest GitHub activity (real GitHub API if github_username set)
-    3. Compute features via SQL CTE pipeline
-    4. Run ML prediction (Random Forest regressor + classifier)
-    5. Generate insight report (rule + ML hybrid engine)
-
-    Returns the full insight report plus pipeline metadata.
-    """
+def run_full_pipeline(
+    student_id:    int,
+    db:            Session = Depends(get_db),
+    force_refresh: bool    = Query(False, description="Bypass 24h cache and re-fetch from all APIs"),
+):
+    """Run the full PIS pipeline for a student in one call."""
     row = db.execute(
         text("SELECT id FROM students WHERE id = :id"),
         {"id": student_id}
@@ -69,7 +63,7 @@ def run_full_pipeline(student_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
 
     try:
-        result = run_pipeline(student_id)
+        result = run_pipeline(student_id, force_refresh=force_refresh)
         return result
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))

@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import requests as req_lib
-from dashboard.api_client import (
+from api_client import  (
     health_check, get_students, create_student, run_pipeline,
     get_insights, get_ranking, get_student_status, get_features,
+    get_student_history,
 )
 
 # ── Page config ───────────────────────────────────────────────────────
@@ -13,6 +14,80 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+# ── Shared rendering helper ───────────────────────────────────────────
+def render_insight(result: dict, show_pipeline_steps: bool = False):
+    """Render a full insight result dict — used by both Onboard and Dashboard pages."""
+    score    = result.get("readiness_score") or 0
+    category = result.get("category", "Unknown")
+    trend    = result.get("score_trend")
+    delta    = result.get("score_delta_7d")
+    stale    = result.get("features_stale", False)
+
+    # ── Score row ─────────────────────────────────────────────────────
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        delta_str = f" ({delta:+.1f} vs 7d ago)" if delta is not None else ""
+        st.metric("Readiness Score", f"{score:.1f}/100", delta=f"{trend}{delta_str}" if trend else None)
+    with col2:
+        badge = "🟢" if category == "Ready" else "🟡" if category == "Near Ready" else "🔴"
+        st.metric("Category", f"{badge} {category}")
+    with col3:
+        top = result.get("top_priority", "")
+        if top and top != "No critical gaps detected.":
+            st.warning(f"**Top Priority:** {top}")
+        else:
+            st.success("No critical gaps detected — student is well-prepared!")
+
+    # ── Stale features warning ────────────────────────────────────────
+    if stale:
+        age = result.get("features_age_hours", 0)
+        st.warning(f"⚠️ Features were computed {age:.0f}h ago — re-run pipeline for fresh data.")
+
+    # ── Composite insights ────────────────────────────────────────────
+    composites = result.get("composite_insights", [])
+    if composites:
+        st.subheader("Pattern Insights")
+        for c in composites:
+            with st.expander(f"🔍 {c['pattern'].replace('_', ' ').title()}"):
+                st.write(c["message"])
+                st.info(f"**Action:** {c['action']}")
+
+    # ── Strengths ─────────────────────────────────────────────────────
+    strengths = result.get("strengths", [])
+    if strengths:
+        st.subheader("Strengths")
+        cols = st.columns(min(len(strengths), 3))
+        for i, s in enumerate(strengths):
+            with cols[i % 3]:
+                st.success(s["message"])
+
+    # ── Recommendations ───────────────────────────────────────────────
+    recommendations = result.get("recommendations", [])
+    if recommendations:
+        st.subheader("Recommendations")
+        for rec in recommendations:
+            tier_icon = "🔴" if rec["tier"] == "critical" else "🟡" if rec["tier"] == "important" else "🔵"
+            with st.expander(
+                f"{tier_icon} #{rec['priority']} [{rec['tier'].upper()}] "
+                f"{rec['area'].replace('_', ' ').title()}"
+            ):
+                st.write(rec["action"])
+                st.caption(rec["why_it_matters"])
+
+    # ── Pipeline steps (optional) ─────────────────────────────────────
+    if show_pipeline_steps:
+        steps = result.get("pipeline_steps", [])
+        if steps:
+            with st.expander("Pipeline execution details"):
+                for step in steps:
+                    icon   = "✅" if step["status"] == "success" else "❌"
+                    source = f" ({step.get('data_source', '')})" if step.get("data_source") else ""
+                    err    = f" — {step['error']}" if step.get("error") else ""
+                    st.text(f"{icon} {step['step']}{source} — {step['duration_ms']}ms{err}")
+                st.caption(f"Total: {result.get('total_duration_ms', 0)}ms  |  ran_at: {result.get('ran_at', '')}")
+
 
 # ── Sidebar navigation ────────────────────────────────────────────────
 st.sidebar.title("🎯 PIS")
@@ -25,7 +100,6 @@ page = st.sidebar.radio(
     index=0,
 )
 
-# ── API health check in sidebar ───────────────────────────────────────
 with st.sidebar:
     st.divider()
     try:
@@ -81,7 +155,8 @@ if page == "Onboard Student":
 
                     status.update(label="Running placement analysis pipeline...")
                     st.write("⏳ Ingesting data, computing features, running ML...")
-                    result = run_pipeline(student_id)
+                    # force_refresh=True on new students — no cache to respect
+                    result = run_pipeline(student_id, force_refresh=True)
                     status.update(label="Analysis complete!", state="complete")
 
                 except req_lib.exceptions.HTTPError as e:
@@ -99,44 +174,7 @@ if page == "Onboard Student":
 
             if result:
                 st.divider()
-                score    = result.get("readiness_score") or 0
-                category = result.get("category", "Unknown")
-
-                col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    st.metric("Readiness Score", f"{score:.1f}/100")
-                with col2:
-                    badge = "🟢" if category == "Ready" else "🟡" if category == "Near Ready" else "🔴"
-                    st.metric("Category", f"{badge} {category}")
-                with col3:
-                    top = result.get("top_priority", "")
-                    if top and top != "No critical gaps detected.":
-                        st.info(f"**Top Priority:** {top}")
-                    else:
-                        st.success("No critical gaps detected — student is well-prepared!")
-
-                strengths = result.get("strengths", [])
-                if strengths:
-                    st.subheader("Strengths")
-                    for s in strengths:
-                        st.markdown(f"✅ {s['message']}")
-
-                recommendations = result.get("recommendations", [])
-                if recommendations:
-                    st.subheader("Recommendations")
-                    for rec in recommendations:
-                        tier_icon = "🔴" if rec["tier"] == "critical" else "🟡" if rec["tier"] == "important" else "🔵"
-                        with st.expander(f"{tier_icon} {rec['priority']}. {rec['area'].replace('_', ' ').title()}"):
-                            st.write(rec["action"])
-                            st.caption(rec["why_it_matters"])
-
-                with st.expander("Pipeline execution details"):
-                    steps = result.get("pipeline_steps", [])
-                    for step in steps:
-                        icon   = "✅" if step["status"] == "success" else "❌"
-                        source = f" ({step.get('data_source', '')})" if step.get("data_source") else ""
-                        st.text(f"{icon} {step['step']}{source} — {step['duration_ms']}ms")
-                    st.caption(f"Total duration: {result.get('total_duration_ms', 0)}ms")
+                render_insight(result, show_pipeline_steps=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -162,81 +200,79 @@ elif page == "Student Dashboard":
     selected_label = st.selectbox("Select Student", list(student_options.keys()))
     selected_id    = student_options[selected_label]
 
-    col_refresh, _ = st.columns([1, 4])
-    with col_refresh:
+    # ── Action buttons ────────────────────────────────────────────────
+    col_run, col_force, _ = st.columns([1, 1, 3])
+    with col_run:
         if st.button("🔄 Re-run Pipeline"):
             with st.spinner("Running pipeline..."):
                 try:
                     run_pipeline(selected_id)
-                    st.success("Pipeline complete! Refreshing...")
+                    st.success("Done! Refreshing...")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Pipeline failed: {e}")
+    with col_force:
+        if st.button("⚡ Force Refresh"):
+            with st.spinner("Force-refreshing (bypassing cache)..."):
+                try:
+                    run_pipeline(selected_id, force_refresh=True)
+                    st.success("Force refresh complete! Refreshing...")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Force refresh failed: {e}")
 
     st.divider()
 
+    # ── Load insight data ─────────────────────────────────────────────
     try:
         insight = get_insights(selected_id)
     except Exception as e:
         st.warning(f"No insight data yet. Run the pipeline first. ({e})")
         st.stop()
 
-    score    = insight.get("readiness_score") or 0
-    category = insight.get("category", "Unknown")
+    # ── Pipeline stage badge ──────────────────────────────────────────
+    try:
+        status_data = get_student_status(selected_id)
+        stage = status_data.get("pipeline_stage", "unknown")
+        stage_color = {"complete": "🟢", "predicted": "🟡", "features_computed": "🟠", "no_data": "🔴"}
+        st.caption(f"{stage_color.get(stage, '⚪')} Pipeline stage: **{stage}**")
+    except Exception:
+        pass
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Readiness Score", f"{score:.1f} / 100")
-    with col2:
-        icon = "🟢" if category == "Ready" else "🟡" if category == "Near Ready" else "🔴"
-        st.metric("Category", f"{icon} {category}")
-    with col3:
-        try:
-            status_data = get_student_status(selected_id)
-            st.metric("Pipeline Stage", status_data.get("pipeline_stage", "unknown"))
-        except Exception:
-            pass
-
-    st.divider()
-
+    # ── Feature bar chart ─────────────────────────────────────────────
     try:
         features = get_features(selected_id)
         if features:
             st.subheader("Feature Profile")
+            total_p = features.get("total_problems", 0)
             chart_data = pd.DataFrame({
-                "Feature": ["Total Problems", "Avg Difficulty", "Consistency", "Commit Frequency"],
+                "Feature": ["Total Problems (÷10)", "Avg Difficulty (×33)", "Consistency %", "Commit Freq %"],
                 "Value": [
-                    features.get("total_problems", 0),
+                    total_p / 10,
                     features.get("avg_difficulty", 0) * 33.3,
                     features.get("consistency_score", 0) * 100,
                     min(features.get("commit_frequency", 0) * 100, 100),
                 ],
             }).set_index("Feature")
             st.bar_chart(chart_data)
+            st.caption(f"Raw total_problems: **{total_p}**  |  avg_difficulty: **{features.get('avg_difficulty', 0):.2f}**  |  consistency: **{features.get('consistency_score', 0):.3f}**")
     except Exception:
         pass
 
-    strengths = insight.get("strengths", [])
-    if strengths:
-        st.subheader("Strengths")
-        cols = st.columns(min(len(strengths), 3))
-        for i, s in enumerate(strengths):
-            with cols[i % 3]:
-                st.success(s["message"])
+    # ── Full insight render ───────────────────────────────────────────
+    render_insight(insight)
 
-    recommendations = insight.get("recommendations", [])
-    if recommendations:
-        st.subheader("Recommendations")
-        for rec in recommendations:
-            tier_icon = "🔴" if rec["tier"] == "critical" else "🟡" if rec["tier"] == "important" else "🔵"
-            with st.expander(
-                f"{tier_icon} #{rec['priority']} [{rec['tier'].upper()}] "
-                f"{rec['area'].replace('_', ' ').title()}"
-            ):
-                st.write(rec["action"])
-                st.caption(rec["why_it_matters"])
-    elif not recommendations:
-        st.success("🎉 No gaps detected — this student is placement-ready!")
+    # ── Score history chart ───────────────────────────────────────────
+    try:
+        history = get_student_history(selected_id)
+        if history and len(history) > 1:
+            st.subheader("Score History")
+            hist_df = pd.DataFrame(history)
+            hist_df["recorded_at"] = pd.to_datetime(hist_df["recorded_at"])
+            hist_df = hist_df.sort_values("recorded_at")
+            st.line_chart(hist_df.set_index("recorded_at")["readiness_score"])
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -275,7 +311,7 @@ elif page == "Leaderboard":
         "percentile":      "Percentile %",
         "branch_rank":     "Branch Rank",
     })
-    display_cols = ["Rank", "Name", "Branch", "CGPA", "Problems", "Score", "Percentile %"]
+    display_cols = [c for c in ["Rank", "Name", "Branch", "CGPA", "Problems", "Score", "Percentile %"] if c in df.columns]
 
     def highlight_top(row):
         if row["Rank"] == 1:
@@ -296,5 +332,4 @@ elif page == "Leaderboard":
         avg_score = sum(r["composite_score"] for r in ranking) / len(ranking)
         st.metric("Average Score", f"{avg_score:.1f}")
     with col3:
-        top = ranking[0]
-        st.metric("Top Student", top["name"])
+        st.metric("Top Student", ranking[0]["name"])
