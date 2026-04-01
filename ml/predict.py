@@ -65,9 +65,10 @@ def predict(student_id: int) -> dict:
     }
 
 def _save_prediction(student_id: int, score: float, category: str):
-    """Upsert prediction into DB."""
+    """Upsert current prediction and append an immutable history row."""
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Keep the latest prediction in the predictions table (upsert)
             cur.execute("""
                 INSERT INTO predictions
                     (student_id, readiness_score, category, last_updated)
@@ -77,6 +78,13 @@ def _save_prediction(student_id: int, score: float, category: str):
                     readiness_score = EXCLUDED.readiness_score,
                     category        = EXCLUDED.category,
                     last_updated    = NOW()
+            """, {'sid': student_id, 'score': score, 'cat': category})
+            # Always append to history — never upsert, never delete
+            cur.execute("""
+                INSERT INTO prediction_history
+                    (student_id, readiness_score, category, recorded_at)
+                VALUES
+                    (%(sid)s, %(score)s, %(cat)s, NOW())
             """, {'sid': student_id, 'score': score, 'cat': category})
 
 if __name__ == "__main__":

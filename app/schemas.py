@@ -68,15 +68,24 @@ class StrengthItem(BaseModel):
     label:   str
     message: str
 
+class CompositeInsight(BaseModel):
+    pattern: str
+    message: str
+    action:  str
+
+
 class InsightResponse(BaseModel):
-    student_id:      int
-    student_name:    str
-    readiness_score: Optional[float]
-    category:        Optional[str]
-    strengths:       list[StrengthItem]
-    weaknesses:      list[WeaknessItem]
-    recommendations: list[RecommendationItem]
-    top_priority:    str
+    student_id:         int
+    student_name:       str
+    readiness_score:    Optional[float]
+    category:           Optional[str]
+    score_delta_7d:     Optional[float] = None   # change vs 7 days ago
+    score_trend:        Optional[str]   = None   # "↑ improving fast" etc.
+    strengths:          list[StrengthItem]
+    weaknesses:         list[WeaknessItem]
+    composite_insights: list[CompositeInsight] = []
+    recommendations:    list[RecommendationItem]
+    top_priority:       str
 
 class RankingItem(BaseModel):
     global_rank:     int
@@ -110,14 +119,17 @@ class PipelineStep(BaseModel):
 
 class PipelineResponse(BaseModel):
     # All InsightResponse fields
-    student_id:      int
-    student_name:    str
-    readiness_score: Optional[float]
-    category:        Optional[str]
-    strengths:       list[StrengthItem]
-    weaknesses:      list[WeaknessItem]
-    recommendations: list[RecommendationItem]
-    top_priority:    str
+    student_id:         int
+    student_name:       str
+    readiness_score:    Optional[float]
+    category:           Optional[str]
+    score_delta_7d:     Optional[float] = None
+    score_trend:        Optional[str]   = None
+    strengths:          list[StrengthItem]
+    weaknesses:         list[WeaknessItem]
+    composite_insights: list[CompositeInsight] = []
+    recommendations:    list[RecommendationItem]
+    top_priority:       str
     # Pipeline metadata
     pipeline_steps:    list[PipelineStep]
     total_duration_ms: float

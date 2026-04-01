@@ -78,3 +78,15 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS leetcode_username VARCHAR(100);
 -- Migration 002: API sync timestamps for staleness checks
 ALTER TABLE students ADD COLUMN IF NOT EXISTS github_last_synced   TIMESTAMPTZ;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS leetcode_last_synced TIMESTAMPTZ;
+
+-- Migration 003: Prediction history for score velocity tracking
+CREATE TABLE IF NOT EXISTS prediction_history (
+    id              SERIAL PRIMARY KEY,
+    student_id      INT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    readiness_score NUMERIC(5,2) NOT NULL,
+    category        VARCHAR(20)  NOT NULL,
+    recorded_at     TIMESTAMPTZ  DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pred_history_student_time
+    ON prediction_history(student_id, recorded_at DESC);
