@@ -259,7 +259,7 @@ def section_title(text: str):
 
 def render_radar_chart(features: dict, student_name: str, cgpa: float = 0.0):
     MAX_PROBLEMS = 200; MAX_DIFFICULTY = 3.0; MAX_CONSISTENCY = 1.0
-    MAX_COMMIT_FREQ = 2.0; MAX_CGPA = 10.0
+    MAX_COMMIT_FREQ = 0.8; MAX_CGPA = 10.0
 
     raw_problems    = features.get("total_problems", 0)
     raw_difficulty  = features.get("avg_difficulty", 0)
