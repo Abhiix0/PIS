@@ -19,7 +19,8 @@ def _get_pool() -> pool.ThreadedConnectionPool:
         # maxconn=20 handles concurrent batch pipeline requests safely.
         # SQLAlchemy pool uses up to 15 (pool_size=5 + max_overflow=10),
         # leaving 65+ connections free under Postgres default max_connections=100.
-        _pool = pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL)
+        _pool = pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL,
+                                             options="-c timezone=UTC")  # API timestamps are UTC
     return _pool
 
 

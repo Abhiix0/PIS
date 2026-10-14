@@ -5,13 +5,15 @@ from pathlib import Path
 
 from fastapi           import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
 from ingest.db_connection import get_connection, close_pool
 from ingest.migrate import pending
 from ml.bundle import load_active, active_version
 from app.logger import logger
-from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles, integrations
+from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles, integrations, v1
 
 
 
@@ -96,6 +98,33 @@ app.include_router(pipeline.router)
 app.include_router(admin.router)
 app.include_router(profiles.router)
 app.include_router(integrations.router)
+app.include_router(v1.router)
+
+
+# ── /api/v1 error envelope: {"error": {code, message, request_id}}. Legacy routes keep {"detail": ...}. ──
+_CODES = {500: "internal_error", 400: "bad_request", 401: "unauthenticated", 403: "forbidden", 404: "not_found", 409: "conflict",
+          413: "payload_too_large", 422: "validation_error", 429: "rate_limited", 501: "not_implemented", 503: "unavailable"}
+
+
+def _envelope(request: Request, status: int, message, headers=None):
+    rid = getattr(request.state, "request_id", None)
+    body = {"error": {"code": _CODES.get(status, "error"), "message": message, "request_id": rid}}
+    return JSONResponse(status_code=status, content=body, headers=headers)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if request.url.path.startswith("/api/v1"):
+        return _envelope(request, exc.status_code, exc.detail, exc.headers)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_handler(request: Request, exc: RequestValidationError):
+    errs = [{"loc": [str(x) for x in e["loc"]], "msg": e["msg"]} for e in exc.errors()]  # no echoed input values
+    if request.url.path.startswith("/api/v1"):
+        return _envelope(request, 422, errs)
+    return JSONResponse(status_code=422, content={"detail": errs})
 
 
 # ── Global exception handler — never leak raw tracebacks ─────────────
@@ -103,6 +132,8 @@ app.include_router(integrations.router)
 async def global_exception_handler(request: Request, exc: Exception):
     rid = getattr(request.state, "request_id", None)
     logger.error(f"[{rid}] unhandled {type(exc).__name__}: {exc}")
+    if request.url.path.startswith("/api/v1"):
+        return _envelope(request, 500, "Internal server error")
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "request_id": rid},
@@ -163,6 +194,8 @@ import time
 async def limit_body(request: Request, call_next):
     # shortcut: trusts Content-Length; chunked uploads need a streaming cap (or a reverse-proxy limit) before public exposure.
     if int(request.headers.get("content-length") or 0) > config.MAX_BODY_BYTES:
+        if request.url.path.startswith("/api/v1"):
+            return _envelope(request, 413, "Request body too large")
         return JSONResponse(status_code=413, content={"detail": "Request body too large"})
     return await call_next(request)
 

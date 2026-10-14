@@ -143,7 +143,18 @@ def _store(run_id: str, pid: str, provider: str, observations) -> tuple[int, int
 
 
 def run_sync(user_id: str, provider: str) -> dict:
-    run_id, cid, pid, username = _begin_run(user_id, provider)
+    run_id, *job = _begin_run(user_id, provider)
+    execute_run(run_id, provider, *job)
+    return get_run(user_id, run_id)
+
+
+def start_sync(user_id: str, provider: str) -> tuple[str, tuple]:
+    """Guards + 'running' row only; the caller runs execute_run later (e.g. as a background task)."""
+    run_id, *job = _begin_run(user_id, provider)
+    return run_id, (run_id, provider, *job)
+
+
+def execute_run(run_id: str, provider: str, cid: str, pid: str, username: str) -> None:
     try:
         observations, partial = _ADAPTERS[provider][0](username)
         if not observations:
@@ -159,7 +170,6 @@ def run_sync(user_id: str, provider: str) -> dict:
     except Exception:
         _finish(run_id, cid, "failed", "internal_error")
         raise
-    return get_run(user_id, run_id)
 
 
 _RUN_COLS = ("r.id::text AS id, c.provider, r.status, r.started_at, r.completed_at, r.records_observed, "
