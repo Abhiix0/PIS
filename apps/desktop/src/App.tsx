@@ -1,6 +1,8 @@
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { ConnectionProvider, useConnection } from "./connection";
-import { Empty, ErrorState, Loading } from "./components/ui";
+import { Button, ErrorState, Loading } from "./components/ui";
+import { SessionProvider, useSession } from "./auth/session";
+import Dashboard from "./screens/Dashboard";
 
 function Status() {
   const { status } = useConnection();
@@ -8,45 +10,67 @@ function Status() {
   return <span className={`pill ${status}`}>{text}</span>;
 }
 
-function Page({ title }: { title: string }) {
+function Settings() {
+  const { signOut } = useSession();
   const { status, recheck } = useConnection();
   return (
     <>
-      <h1>{title}</h1>
-      {status === "checking" && <Loading />}
-      {status === "offline" && (
-        <ErrorState
-          message="Cannot reach the server. Check your connection and try again."
-          onRetry={recheck}
-        />
-      )}
-      {status === "online" && (
-        <Empty title="Nothing here yet" hint="This screen is built in a later phase." />
-      )}
+      <h1>Settings</h1>
+      {status === "offline" && <ErrorState message="Cannot reach the server." onRetry={recheck} />}
+      <Button onClick={() => void signOut()}>Sign out</Button>
     </>
+  );
+}
+
+function SignIn() {
+  const { state, notice, signIn, cancel } = useSession();
+  return (
+    <main className="signin">
+      <h1>Placement Intelligence</h1>
+      {notice && <p role="alert">{notice}</p>}
+      {state === "signing-in" ? (
+        <>
+          <Loading label="Waiting for you to finish signing in in your browser…" />
+          <Button onClick={cancel}>Cancel</Button>
+        </>
+      ) : (
+        <Button onClick={() => void signIn()}>Sign in</Button>
+      )}
+    </main>
+  );
+}
+
+function Shell() {
+  const { state } = useSession();
+  if (state === "loading") return <Loading />;
+  if (state !== "signed-in") return <SignIn />;
+  return (
+    <div className="shell">
+      <header>
+        <strong>Placement Intelligence</strong>
+        <Status />
+      </header>
+      <nav aria-label="Primary">
+        <NavLink to="/dashboard">Dashboard</NavLink>
+        <NavLink to="/settings">Settings</NavLink>
+      </nav>
+      <main>
+        <Routes>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 
 export default function App() {
   return (
     <ConnectionProvider>
-      <div className="shell">
-        <header>
-          <strong>Placement Intelligence</strong>
-          <Status />
-        </header>
-        <nav aria-label="Primary">
-          <NavLink to="/dashboard">Dashboard</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
-        </nav>
-        <main>
-          <Routes>
-            <Route path="/dashboard" element={<Page title="Dashboard" />} />
-            <Route path="/settings" element={<Page title="Settings" />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </main>
-      </div>
+      <SessionProvider>
+        <Shell />
+      </SessionProvider>
     </ConnectionProvider>
   );
 }

@@ -187,3 +187,22 @@ def test_data_requests_are_idempotent_and_owner_scoped():
     assert [r["kind"] for r in u.get("/me/data-requests").json()["items"]] == ["deletion"]
     assert U().get("/me/data-requests").json()["items"] == []
     error_of(u.post("/me/data-requests/bogus"), 422, "validation_error")
+
+
+# ── Phase 11: what the desktop session flow depends on ────────────────
+def test_profile_is_visible_only_to_its_owner():
+    a, b = U(), U()
+    a.put("/me/profile", json={"display_name": "Ada", "cgpa": 9})
+    assert b.get("/me").json()["profile"] is None  # same endpoint, different token: nothing of A's
+    b.put("/me/profile", json={"display_name": "Bob"})
+    assert a.get("/me").json()["profile"]["display_name"] == "Ada"
+
+
+def test_expired_and_revoked_tokens_are_401_with_the_envelope():
+    sub = f"v1-{uuid.uuid4()}"
+    expired = client.get(f"{V1}/me", headers=bearer(make_token(sub, exp_in=-10)))
+    assert expired.status_code == 401
+    live = bearer(make_token(sub, iat_offset=-5))
+    assert client.get(f"{V1}/me", headers=live).status_code == 200
+    assert client.post("/auth/logout", headers=live).status_code == 204
+    assert client.get(f"{V1}/me", headers=live).status_code == 401  # logout revokes tokens issued before it
