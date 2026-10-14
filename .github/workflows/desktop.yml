@@ -1,0 +1,24 @@
+name: desktop
+on:
+  push:
+    paths: ["apps/desktop/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["apps/desktop/**", ".github/workflows/desktop.yml"]
+
+jobs:
+  frontend:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: apps/desktop } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/desktop/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format
+      - run: npm test
+      - run: npm run build
+      # Smoke check only: compiles the Rust shell, no installer.
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npx tauri build --no-bundle
