@@ -23,6 +23,14 @@ def _get_pool() -> pool.ThreadedConnectionPool:
     return _pool
 
 
+def close_pool() -> None:
+    """Close all pooled connections (API shutdown)."""
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        _pool = None
+
+
 @contextmanager
 def get_connection():
     """Borrow a connection from the pool, commit on success, rollback on error."""

@@ -65,16 +65,34 @@ def test_get_prediction_missing_returns_404():
 
 # ── Insights endpoint ─────────────────────────────────────────────────
 
-def test_insights_strong_student_has_no_weaknesses():
-    r = client.get("/insights/1")
+@pytest.fixture
+def strong_student():
+    """A self-contained strong profile (recent, many hard problems, heavy commits); removed afterwards.
+    Seed students are not strong (student 1 has 18 problems dated 2024), so tests must not assume so."""
+    from ingest.db_connection import get_connection
+    from features.compute import run_feature_sql_for_student
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO students (name, email, cgpa, branch) "
+                        "VALUES ('Strong Fixture', %s, 9.0, 'CSE') RETURNING id",
+                        (f"strong-{uuid.uuid4().hex[:8]}@test.dev",))
+            sid = cur.fetchone()[0]
+            cur.execute("INSERT INTO coding_activity (student_id, problem_id, difficulty, solved_at) "
+                        "SELECT %s, 'F' || g, 'hard', CURRENT_DATE - (g %% 60) FROM generate_series(1, 80) g", (sid,))
+            cur.execute("INSERT INTO github_activity (student_id, repo_name, commits, commit_date) "
+                        "SELECT %s, 'repo' || g, 40, CURRENT_DATE - (g * 3) FROM generate_series(1, 20) g", (sid,))
+    run_feature_sql_for_student(sid)
+    yield sid
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM students WHERE id = %s", (sid,))
+
+
+def test_insights_strong_student_has_no_weaknesses(strong_student):
+    r = client.get(f"/insights/{strong_student}")
     assert r.status_code == 200
     data = r.json()
-    # Student 1 is strong, but real seed data has low commit_frequency (0.29).
-    # We allow up to 1 weakness so the test passes with real-world data.
-    assert len(data["weaknesses"]) <= 1 
-    # Logic remains: ensure it's not flagging "critical" gaps for top students
-    assert data["top_priority"].lower() in ("no critical gaps detected.", "") \
-        or data["recommendations"][0]["tier"] != "critical" if data["recommendations"] else True
+    assert data["weaknesses"] == []
 
 def test_insights_weak_student_has_recommendations():
     r = client.get("/insights/8")

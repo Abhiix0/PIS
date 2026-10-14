@@ -1,3 +1,4 @@
+from app.logger import logger
 from fastapi         import APIRouter, HTTPException, Query
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.schemas     import PipelineResponse, BatchPipelineRequest
@@ -30,7 +31,7 @@ def run_batch_pipeline(body: BatchPipelineRequest):
                 "weaknesses":        [],
                 "composite_insights": [],
                 "recommendations":   [],
-                "top_priority":      f"Pipeline failed: {str(e)}",
+                "top_priority":      "Pipeline failed; see server logs",
                 "pipeline_steps":    [],
                 "total_duration_ms": 0,
                 "ran_at":            "",
@@ -86,6 +87,8 @@ def run_full_pipeline(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("pipeline failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline failed: {type(e).__name__}: {e}")
+        logger.exception("pipeline failed")
+        raise HTTPException(status_code=500, detail="Internal server error")

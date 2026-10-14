@@ -1,3 +1,4 @@
+from app.logger import logger
 from fastapi        import APIRouter, HTTPException, Query
 from datetime       import date, timedelta
 import random
@@ -120,7 +121,8 @@ def ingest_coding(student_id: int):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
+        logger.exception("ingest failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/github/real/{student_id}", response_model=IngestResponse)
@@ -148,7 +150,8 @@ def ingest_github_real(student_id: int):
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"GitHub API error: {type(e).__name__}: {e}")
+        logger.exception("ingest failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     if not records:
         return IngestResponse(
@@ -197,4 +200,5 @@ def ingest_github(student_id: int):
             data_source="synthetic"
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
+        logger.exception("ingest failed")
+        raise HTTPException(status_code=500, detail="Internal server error")

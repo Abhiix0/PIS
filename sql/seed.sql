@@ -1,6 +1,6 @@
 -- sql/seed.sql
--- Run AFTER schema.sql
--- Run: psql -U pis_user -d pis_db -f sql/seed.sql
+-- DEMO DATA ONLY. Loaded by `python -m ingest.migrate --seed` after migrations;
+-- refused when APP_ENV is staging/production.
 
 -- 8 students across 4 archetypes (2 per type)
 INSERT INTO students (name, email, cgpa, branch) VALUES

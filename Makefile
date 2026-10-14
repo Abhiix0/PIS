@@ -1,5 +1,5 @@
 # PIS — Project Commands
-.PHONY: up up-detached down down-clean restart test test-local seed pipeline-all health logs clean
+.PHONY: test-unit migrate up up-detached down down-clean restart test test-local seed pipeline-all health logs clean
 
 up:
 	docker-compose up --build
@@ -18,6 +18,12 @@ restart:
 
 test:
 	docker-compose exec api pytest tests/ -v --tb=short
+
+test-unit:
+	pytest tests/test_core.py tests/test_insights.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_migrate.py -v --tb=short
+
+migrate:
+	docker-compose exec api python -m ingest.migrate
 
 test-local:
 	pytest tests/ -v --tb=short

@@ -1,3 +1,4 @@
+from app.logger import logger
 from fastapi      import APIRouter, HTTPException
 from app.schemas  import PredictionResponse
 from ingest.db_connection import get_connection
@@ -25,7 +26,8 @@ def run_prediction(student_id: int):
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
+        logger.exception("predictions failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/prediction/{student_id}", response_model=PredictionResponse)

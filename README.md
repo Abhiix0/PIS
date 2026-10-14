@@ -208,12 +208,11 @@ PIS/
 ├── services/
 │   └── pipeline.py          # 5-step orchestration with per-step timing, TTL-aware API calls
 ├── sql/
-│   ├── schema.sql           # Tables + indexes + migrations (all in one file)
 │   ├── seed.sql             # 8 students with varied realistic activity profiles
 │   ├── feature_engineering.sql         # Full-table 5-CTE pipeline (used by ml.train)
 │   ├── feature_engineering_single.sql  # Parameterised single-student variant (used by pipeline)
 │   ├── ranking.sql          # Composite score + window function global/branch ranking
-│   └── migrations/          # Numbered migration files (also embedded in schema.sql)
+│   └── migrations/          # Ordered migrations (000_baseline…), applied by ingest/migrate.py
 ├── dashboard/
 │   ├── api_client.py        # All HTTP calls in one place
 │   └── app.py               # 3-page Streamlit app with dark theme
@@ -266,9 +265,10 @@ make clean           # Remove __pycache__ and .pyc files
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | e.g. `postgresql://pis_user:pis_password@db:5432/pis_db` |
+| `DATABASE_URL` | Yes | e.g. `postgresql://pis_user:<password>@db:5432/pis_db` |
 | `GITHUB_TOKEN` | No | Personal Access Token — raises rate limit from 60 to 5,000 req/hr |
-| `ADMIN_KEY` | No | Minimum 16 chars — secures `/admin/retrain` endpoints |
+| `ADMIN_KEY` | Staging/prod | Minimum 16 chars — `/admin/*` returns 503 while unset |
+| `APP_ENV` | No | `local` (default), `test`, `staging`, `production`; the last two enforce a real `ADMIN_KEY`, reject placeholder secrets, and refuse demo seed |
 
 ---
 

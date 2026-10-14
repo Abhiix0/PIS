@@ -8,9 +8,9 @@ Snapshot of the repo at `main` (commit `82b072d`), from reading the source. **Ve
 
 ## 2. Database initialization
 
-- On first volume creation, Postgres runs `sql/schema.sql` then `sql/seed.sql` (mounted into `docker-entrypoint-initdb.d`). Not re-run on an existing volume (`make down-clean` to reset). Verified.
-- Tables: `students`, `coding_activity` (unique `(student_id, problem_id)`), `github_activity`, `features`, `predictions`, `prediction_history`. `schema.sql` embeds migrations 001 (usernames), 002 (sync timestamps), 003 (history).
-- **Gap**: `migrations/001_add_github_unique.sql` (`uq_github_activity`) is not in `schema.sql`, yet `services/pipeline.py` and the GitHub ingest use `ON CONFLICT (student_id, repo_name, commit_date)`. On a fresh DB this likely fails with "no unique or exclusion constraint matching" (unverified, not run). There are two `001_` files; no migration runner or version table exists.
+- **Updated in Phase 3.** The `db` container no longer runs init scripts. `entrypoint.sh` runs `python -m ingest.migrate` (plus `--seed` when `SEED_DEMO_DATA=true`, compose default, refused when `APP_ENV` is staging/production) before features/training. The API also refuses to start if migrations are pending.
+- Tables: `students`, `coding_activity` (unique `(student_id, problem_id)`), `github_activity`, `features`, `predictions`, `prediction_history`. Migrations: 000 baseline, 001 github unique, 001 usernames, 002 sync timestamps, 003 history (`sql/migrations/`, tracked in `schema_migrations`).
+- Resolved in Phase 3: `uq_github_activity` is applied by migration `001_add_github_unique.sql` (dedupes first); the non-immutable partial index was replaced by `idx_coding_student_date`. See `docs/phase3/stabilization-report.md`.
 - Seed: 8 hand-written students (`aryan@pis.dev` etc.) with fixed-date activity rows. Verified.
 - `features` has no `cgpa` column; CGPA is joined from `students` at load/predict time.
 
@@ -83,4 +83,4 @@ Ran with `venv/Scripts/python.exe -m pytest` on the four mock-based files: **23 
 5. Which academic data (CGPA) is necessary vs. optional.
 6. Cloud provider, background jobs, model artifact storage, desktop updater.
 7. Handling of the synthetic fallback and demo data: remove, or isolate behind an explicit demo mode.
-8. Migration strategy (adopt a runner; reconcile `schema.sql` vs `migrations/`).
+8. ~~Migration strategy~~ — decided in Phase 3: ordered SQL runner (see report).

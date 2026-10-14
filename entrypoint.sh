@@ -1,6 +1,13 @@
 #!/bin/sh
 set -e
 
+echo Applying migrations
+if [ "${SEED_DEMO_DATA:-false}" = "true" ]; then
+    python -m ingest.migrate --seed
+else
+    python -m ingest.migrate
+fi
+
 echo Computing features
 python -m features.compute
 

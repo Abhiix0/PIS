@@ -1,12 +1,14 @@
-import os
 import time as time_module
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi           import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from ingest.db_connection import get_connection
+import config
+from ingest.db_connection import get_connection, close_pool
+from ingest.migrate import pending
 from app.logger import logger
 from app.routers import students, ingest, predictions, insights, features, pipeline, admin
 
@@ -32,16 +34,22 @@ def check_db_connection() -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    errors = []
+    errors = config.validate()
 
-    if not os.getenv("DATABASE_URL"):
-        errors.append("DATABASE_URL environment variable is not set.")
-
-    if not check_db_connection():
-        errors.append(
-            "DATABASE_URL is set but database is unreachable. "
-            "Check PostgreSQL connection."
-        )
+    if config.DATABASE_URL:
+        if not check_db_connection():
+            errors.append(
+                "DATABASE_URL is set but database is unreachable. "
+                "Check PostgreSQL connection."
+            )
+        else:
+            try:
+                with get_connection() as conn:
+                    todo = pending(conn)
+                if todo:
+                    errors.append(f"Unapplied migrations: {todo}. Run: python -m ingest.migrate")
+            except Exception as e:
+                errors.append(f"Could not check migrations: {type(e).__name__}")
 
     missing_models = [str(f) for f in REQUIRED_MODEL_FILES if not f.exists()]
     if missing_models:
@@ -58,10 +66,8 @@ async def lifespan(app: FastAPI):
             f"See logs above for details."
         )
 
-    admin_key = os.getenv("ADMIN_KEY", "")
-    if len(admin_key) < 16:
-        print(f"[STARTUP WARNING] ADMIN_KEY not set or too short. "
-              f"/admin endpoints are insecure.")
+    if len(config.ADMIN_KEY) < config.MIN_ADMIN_KEY_LEN:
+        print("[STARTUP WARNING] ADMIN_KEY not set or too short. /admin endpoints are disabled.")
 
     print(f"PIS API started successfully")
     print(f"  Database: connected")
@@ -69,6 +75,7 @@ async def lifespan(app: FastAPI):
     print(f"  Docs:     http://localhost:8000/docs")
 
     yield
+    close_pool()
 
 
 app = FastAPI(
@@ -97,9 +104,11 @@ app.include_router(admin.router)
 # ── Global exception handler — never leak raw tracebacks ─────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    rid = getattr(request.state, "request_id", None)
+    logger.error(f"[{rid}] unhandled {type(exc).__name__}: {exc}")
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Internal server error: {type(exc).__name__}"},
+        content={"detail": "Internal server error", "request_id": rid},
     )
 
 # ── Health check endpoints ────────────────────────────────────────────
@@ -153,14 +162,17 @@ import time
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start    = time.perf_counter()
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    request.state.request_id = request_id
     response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
     duration = (time.perf_counter() - start) * 1000
 
     path_parts = request.url.path.split("/")
     student_id = next((p for p in path_parts if p.isdigit()), "—")
 
     logger.info(
-        f"{request.method:<6} {request.url.path:<35} "
+        f"[{request_id}] {request.method:<6} {request.url.path:<35} "
         f"student={student_id:<4} status={response.status_code} "
         f"duration={duration:.1f}ms"
     )

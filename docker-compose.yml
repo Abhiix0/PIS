@@ -1,18 +1,14 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:15-alpine
     environment:
       POSTGRES_DB: pis_db
       POSTGRES_USER: pis_user
-      POSTGRES_PASSWORD: pis_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pis_local_dev}  # local-dev default; set a real one outside local
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./sql/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pis_user -d pis_db"]
       interval: 5s
@@ -24,8 +20,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://pis_user:pis_password@db:5432/pis_db
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: postgresql://pis_user:${POSTGRES_PASSWORD:-pis_local_dev}@db:5432/pis_db
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ADMIN_KEY: ${ADMIN_KEY:-}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}  # compose is the local-dev path; refused if APP_ENV is staging/production
     depends_on:
       db:
         condition: service_healthy

@@ -1,5 +1,6 @@
 import os
 from fastapi         import APIRouter, HTTPException, Query
+from app.logger import logger
 from app.schemas     import InsightResponse, RankingItem
 from ingest.db_connection import get_connection
 from insights.engine import InsightEngine
@@ -39,7 +40,8 @@ def get_insights(student_id: int):
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Insight generation failed: {e}")
+        logger.exception("insights failed")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/ranking", response_model=list[RankingItem])
