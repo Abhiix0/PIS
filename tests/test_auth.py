@@ -22,6 +22,7 @@ OPERATOR_ROUTES = [
     ("post", "/ingest/coding/1"), ("post", "/ingest/github/1"), ("post", "/ingest/coding/real/1"), ("post", "/ingest/github/real/1"),
     ("post", "/predict/1"), ("get", "/prediction/1"), ("get", "/insights/1"), ("get", "/ranking"), ("get", "/features/1"),
     ("post", "/pipeline/1"), ("post", "/pipeline/batch"), ("post", "/admin/retrain"), ("get", "/admin/retrain/status"),
+    ("get", "/admin/audit-events"), ("get", "/admin/sync-failures"),
 ]
 USER_ROUTES = [("get", "/me"), ("post", "/auth/logout"), ("post", "/profiles"), ("get", "/profiles/x"), ("patch", "/profiles/x")]
 

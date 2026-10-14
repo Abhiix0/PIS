@@ -10,6 +10,7 @@ from ingest import github_api, leetcode_api
 from ingest.db_connection import get_connection
 from ingest.provider import ProviderError
 from ingest.validators import validate_observation
+from services import privacy
 
 INGESTION_VERSION = "ingest-v1"
 _STALE_RUN_MINUTES = 15  # a 'running' row older than this is a dead worker, not a live sync
@@ -62,13 +63,18 @@ def connect(user_id: str, provider: str, username: str) -> dict:
         raise SyncRefused(409, "Connection changed concurrently; retry.")
 
 
-def disconnect(user_id: str, provider: str) -> None:
-    """Stop syncing. Imported observations are kept as history (deleting them is the Phase 13 workflow)."""
+def disconnect(user_id: str, provider: str, delete_data: bool = False) -> None:
+    """Stop syncing (no provider token is ever stored, so there is nothing to revoke). Imported observations are
+    kept as history unless `delete_data`; existing assessment snapshots are immutable and are never altered."""
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("UPDATE integration_connections SET status = 'disconnected', disconnected_at = now() "
                     "WHERE user_id = %s AND provider = %s AND status <> 'disconnected'", (user_id, provider))
         if not cur.rowcount:
             raise SyncRefused(404, "No active connection for this provider.")
+        if delete_data:
+            privacy.delete_source_data(cur, user_id, provider)
+        privacy.audit(cur, "integration.disconnected_and_data_deleted" if delete_data else "integration.disconnected",
+                      user_id, target=provider)
 
 
 def _connection(cur, cid) -> dict:

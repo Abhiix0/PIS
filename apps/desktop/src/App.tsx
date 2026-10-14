@@ -8,6 +8,7 @@ import History from "./screens/History";
 import Integrations from "./screens/Integrations";
 import Overview from "./screens/Overview";
 import Plan from "./screens/Plan";
+import Privacy from "./screens/Privacy";
 
 function Status() {
   const { status } = useConnection();
@@ -23,6 +24,7 @@ function Settings() {
       <h1>Settings</h1>
       {status === "offline" && <ErrorState message="Cannot reach the server." onRetry={recheck} />}
       <Button onClick={() => void signOut()}>Sign out</Button>
+      <Privacy />
     </>
   );
 }

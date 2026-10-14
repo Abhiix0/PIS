@@ -45,7 +45,8 @@ PROTECTED = [("get", "/me"), ("put", "/me/profile"), ("get", "/integrations"), (
              ("delete", "/integrations/github"), ("post", "/integrations/github/sync"), ("get", "/sync-runs?provider=github"), ("get", f"/sync-runs/{uuid.uuid4()}"),
              ("get", "/me/data-quality"), ("post", "/assessments"), ("get", "/assessments"),
              ("get", f"/assessments/{uuid.uuid4()}"), ("get", f"/assessments/{uuid.uuid4()}/evidence"),
-             ("post", "/me/data-requests/export"), ("get", "/me/data-requests")]
+             ("post", "/me/data-requests/deletion"), ("get", "/me/data-requests"), ("get", "/me/export"),
+             ("get", "/me/privacy"), ("put", "/me/privacy")]
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)
@@ -188,14 +189,55 @@ def test_assessment_rows_are_immutable(user):
             cur.execute("UPDATE assessments SET reason = 'x' WHERE id::text = %s", (aid,))
 
 
-def test_data_requests_are_idempotent_and_owner_scoped():
+def _count(sql, *args):
+    from ingest.db_connection import get_connection
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, args)
+        return cur.fetchone()[0]
+
+
+def test_disconnect_can_delete_imported_data_but_keeps_assessments(user):
+    with with_adapter(gh(("a", 3))):
+        assert user.post("/integrations/github/sync").status_code == 202
+    aid = user.post("/assessments").json()["id"]
+    uid = user.get("/me").json()["profile"]["id"]
+    q = "SELECT count(*) FROM source_observations WHERE profile_id::text = %s"
+    assert _count(q, uid) > 0
+    assert user.delete("/integrations/github?delete_data=true").status_code == 204
+    assert _count(q, uid) == 0
+    assert user.get(f"/assessments/{aid}/evidence").json()["evidence"]["github"] is not None  # immutable snapshot
+
+
+def test_export_has_own_data_only_and_no_secrets(user):
+    with with_adapter(gh(("a", 3))):
+        user.post("/integrations/github/sync")
+    user.post("/assessments")
+    other = U()
+    other.put("/me/profile", json={"display_name": "Other"})
+    r = user.get("/me/export")
+    d = r.json()
+    assert r.status_code == 200 and d["format"] == "pis-export-v1" and d["profile"]["display_name"] == "T"
+    assert d["observations"] and d["assessments"] and d["integrations"][0]["external_username"] == "octo"
+    assert "Other" not in r.text and not any(w in r.text.lower() for w in ("token", "secret", "password"))
+
+
+def test_deletion_requires_confirm_erases_and_locks_account(user):
+    error_of(user.post("/me/data-requests/deletion"), 400, "bad_request")
+    user.post("/assessments")
+    pid = user.get("/me").json()["profile"]["id"]
+    r = user.post("/me/data-requests/deletion?confirm=true")
+    assert r.status_code == 200 and r.json()["status"] == "completed"
+    assert user.get("/me").status_code == 403 and user.get("/me/export").status_code == 403
+    assert _count("SELECT count(*) FROM profiles WHERE id::text = %s", pid) == 0
+    assert _count("SELECT count(*) FROM assessments WHERE profile_id::text = %s", pid) == 0
+    assert _count("SELECT count(*) FROM audit_events WHERE action = 'account.deleted'") >= 1
+
+
+def test_consent_is_off_by_default_and_revocable():
     u = U()
-    first = u.post("/me/data-requests/deletion")
-    assert first.status_code == 202 and first.json()["status"] == "requested"
-    assert u.post("/me/data-requests/deletion").json()["id"] == first.json()["id"]
-    assert [r["kind"] for r in u.get("/me/data-requests").json()["items"]] == ["deletion"]
-    assert U().get("/me/data-requests").json()["items"] == []
-    error_of(u.post("/me/data-requests/bogus"), 422, "validation_error")
+    assert u.get("/me/privacy").json()["research_consent"] is False
+    assert u.put("/me/privacy", json={"research": True}).json()["research_consent"] is True
+    assert u.put("/me/privacy", json={"research": False}).json()["research_consent"] is False
 
 
 # ── Phase 11: what the desktop session flow depends on ────────────────

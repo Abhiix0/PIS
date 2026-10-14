@@ -7,7 +7,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import Principal, require_operator, expensive
+from ingest.db_connection import get_connection
 from ml import bundle
+from services import privacy
 
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_operator), Depends(expensive)])
 
@@ -71,7 +73,7 @@ def _run_retrain():
 
 
 @router.post("/retrain", status_code=202)
-def trigger_retrain():
+def trigger_retrain(p: Principal = Depends(require_operator)):
     """Trigger a background model retrain.
 
     - Non-blocking: returns 202 immediately
@@ -81,6 +83,7 @@ def trigger_retrain():
     if not _retrain_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Retrain already in progress")
 
+    _audit(p, "model.retrain_started")
     _retrain_status["state"] = "running"
     t = threading.Thread(target=_run_retrain, daemon=True)
     t.start()
@@ -92,6 +95,11 @@ def trigger_retrain():
 def retrain_status():
     """Poll retrain progress. States: idle | running | completed | failed."""
     return _retrain_status
+
+
+def _audit(p: Principal, action: str, target: str | None = None):
+    with get_connection() as conn, conn.cursor() as cur:
+        privacy.audit(cur, action, p.user_id, p.subject, target)
 
 
 def _guard(fn, *args):
@@ -109,15 +117,41 @@ def list_models():
 @router.post("/models/{version}/approve")
 def approve_model(version: str, note: str = "", p: Principal = Depends(require_operator)):
     _guard(bundle.approve, version, p.subject, note)
+    _audit(p, "model.approved", version)
     return {"version": version, "status": "approved"}
 
 
 @router.post("/models/{version}/activate")
 def activate_model(version: str, p: Principal = Depends(require_operator)):
     _guard(bundle.activate, version, p.subject)
+    _audit(p, "model.activated", version)
     return {"version": version, "status": "active"}
 
 
 @router.post("/models/rollback")
 def rollback_model(p: Principal = Depends(require_operator)):
-    return {"version": _guard(bundle.rollback, p.subject), "status": "active"}
+    version = _guard(bundle.rollback, p.subject)
+    _audit(p, "model.rolled_back", version)
+    return {"version": version, "status": "active"}
+
+
+@router.get("/audit-events")
+def audit_events(limit: int = 100):
+    """Newest first: action, actor ids and target only. Never personal data or secrets."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id::text, action, actor_user_id::text, actor_subject, target, created_at FROM audit_events "
+                    "ORDER BY created_at DESC LIMIT %s", (max(1, min(limit, 500)),))
+        keys = ("id", "action", "actor_user_id", "actor_subject", "target", "created_at")
+        return [dict(zip(keys, r)) for r in cur.fetchall()]
+
+
+@router.get("/sync-failures")
+def sync_failures(limit: int = 50):
+    """Failed/partial sync runs with sanitized diagnostics: provider, status, safe error code, counts. No user,
+    username or profile fields are selected, so operators cannot browse personal data through this."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT r.id::text, c.provider, r.status, r.safe_error_code, r.records_rejected, r.started_at, "
+                    "r.completed_at FROM sync_runs r JOIN integration_connections c ON c.id = r.connection_id "
+                    "WHERE r.status IN ('failed','partial') ORDER BY r.started_at DESC LIMIT %s", (max(1, min(limit, 200)),))
+        keys = ("id", "provider", "status", "safe_error_code", "records_rejected", "started_at", "completed_at")
+        return [dict(zip(keys, r)) for r in cur.fetchall()]

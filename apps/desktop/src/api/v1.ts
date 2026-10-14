@@ -56,8 +56,13 @@ export interface Evidence {
 
 export const connectProvider = (provider: string, username: string) =>
   request<Integration>(`/api/v1/integrations/${provider}`, { method: "PUT", body: { username } });
-export const disconnectProvider = (provider: string) =>
-  request<void>(`/api/v1/integrations/${provider}`, { method: "DELETE" });
+export const disconnectProvider = (provider: string, deleteData = false) =>
+  request<void>(`/api/v1/integrations/${provider}${deleteData ? "?delete_data=true" : ""}`, { method: "DELETE" });
+export const exportMyData = () => request<unknown>("/api/v1/me/export");
+export const deleteAccount = () => request<unknown>("/api/v1/me/data-requests/deletion?confirm=true", { method: "POST" });
+export const getPrivacy = () => request<{ research_consent: boolean }>("/api/v1/me/privacy");
+export const putPrivacy = (research: boolean) =>
+  request<{ research_consent: boolean }>("/api/v1/me/privacy", { method: "PUT", body: { research } });
 export const startSync = (provider: string) =>
   request<{ id: string }>(`/api/v1/integrations/${provider}/sync`, { method: "POST" });
 export const getSyncRun = (id: string) => request<SyncRun>(`/api/v1/sync-runs/${id}`);

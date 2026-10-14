@@ -60,6 +60,7 @@ function Provider({
   conn?: Integration;
   reload: () => void;
 }) {
+  const [wipe, setWipe] = useState(false);
   const [username, setUsername] = useState("");
   const [consent, setConsent] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -125,15 +126,22 @@ function Provider({
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                await disconnectProvider(p.id);
+                await disconnectProvider(p.id, wipe);
                 reload();
               })
             }
           >
             Disconnect
           </Button>
+          <p>
+            <label>
+              <input type="checkbox" checked={wipe} onChange={(e) => setWipe(e.target.checked)} /> Also delete data
+              imported from {p.name}
+            </label>
+          </p>
           <p className="muted">
-            Disconnecting stops syncing; data already imported is kept. Deleting it is not available yet.
+            Disconnecting stops syncing; no {p.name} credentials are stored, so none need revoking. Imported data is
+            kept unless you tick the box. Past assessments keep the snapshot they were built from either way.
           </p>
         </>
       ) : (

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import Principal, current_principal, expensive
 from ingest.db_connection import get_connection
-from services import sync
+from services import privacy, sync
 
 router = APIRouter(prefix="/api/v1")
 Provider = Literal["github", "leetcode"]
@@ -92,9 +92,11 @@ def connect(provider: Provider, body: ConnectIn, p: Principal = Depends(current_
 
 
 @router.delete("/integrations/{provider}", status_code=204, tags=["Integrations"])
-def disconnect(provider: Provider, p: Principal = Depends(current_principal)):
+def disconnect(provider: Provider, delete_data: bool = Query(False), p: Principal = Depends(current_principal)):
+    """Stops syncing. `delete_data=true` also erases imported observations for this provider; past assessment
+    snapshots keep the values they were built from (they are immutable)."""
     try:
-        sync.disconnect(p.user_id, provider)
+        sync.disconnect(p.user_id, provider, delete_data)
     except sync.SyncRefused as e:
         _refused(e)
 
@@ -222,16 +224,20 @@ def get_assessment_evidence(assessment_id: str, p: Principal = Depends(current_p
         return _one(cur, "Assessment")
 
 
-# ── Export / deletion requests ─────────────────────────────────────────
-@router.post("/me/data-requests/{kind}", status_code=202, tags=["Privacy"])
-def request_data_action(kind: Literal["export", "deletion"], p: Principal = Depends(current_principal)):
-    """Records the request (idempotent: an open one is returned unchanged). Nothing fulfils it yet; the status
-    stays 'requested' until the export/deletion workflow ships."""
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("INSERT INTO data_requests (user_id, kind) VALUES (%s, %s) ON CONFLICT DO NOTHING", (p.user_id, kind))
-        cur.execute("SELECT id::text AS id, kind, status, requested_at, updated_at FROM data_requests "
-                    "WHERE user_id = %s AND kind = %s ORDER BY requested_at DESC LIMIT 1", (p.user_id, kind))
-        return _dicts(cur)[0]
+# ── Privacy: export, deletion, consent ─────────────────────────────────
+@router.get("/me/export", tags=["Privacy"], dependencies=[Depends(expensive)])
+def export_my_data(p: Principal = Depends(current_principal)):
+    """All stored data for the caller as JSON (format `pis-export-v1`). Contains no secrets: none are stored."""
+    return privacy.export_data(p.user_id)
+
+
+@router.post("/me/data-requests/deletion", tags=["Privacy"])
+def request_deletion(confirm: bool = Query(False), p: Principal = Depends(current_principal)):
+    """Irreversibly erases profile, connections, observations and assessments, and locks the account (later
+    requests with old or new tokens get 403). `confirm=true` is required."""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Pass confirm=true to permanently delete your data.")
+    return privacy.delete_account(p.user_id)
 
 
 @router.get("/me/data-requests", tags=["Privacy"])
@@ -240,3 +246,27 @@ def list_data_requests(p: Principal = Depends(current_principal)):
         cur.execute("SELECT id::text AS id, kind, status, requested_at, updated_at FROM data_requests "
                     "WHERE user_id = %s ORDER BY requested_at DESC LIMIT 50", (p.user_id,))
         return {"items": _dicts(cur)}
+
+
+class ConsentIn(BaseModel):
+    research: bool
+
+
+@router.get("/me/privacy", tags=["Privacy"])
+def get_privacy(p: Principal = Depends(current_principal)):
+    """Optional consent state. Core processing (profile, synced provider data, assessments) needs no consent."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT research_consent_at FROM users WHERE id = %s", (p.user_id,))
+        at = cur.fetchone()[0]
+    return {"research_consent": at is not None, "research_consent_at": at}
+
+
+@router.put("/me/privacy", tags=["Privacy"])
+def put_privacy(body: ConsentIn, p: Principal = Depends(current_principal)):
+    """Grant or revoke optional research/training use. Recorded only: no such use exists yet."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE users SET research_consent_at = CASE WHEN %s THEN COALESCE(research_consent_at, now()) END "
+                    "WHERE id = %s RETURNING research_consent_at", (body.research, p.user_id))
+        at = cur.fetchone()[0]
+        privacy.audit(cur, "consent.research_granted" if body.research else "consent.research_revoked", p.user_id)
+    return {"research_consent": at is not None, "research_consent_at": at}
