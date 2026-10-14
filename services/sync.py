@@ -62,6 +62,15 @@ def connect(user_id: str, provider: str, username: str) -> dict:
         raise SyncRefused(409, "Connection changed concurrently; retry.")
 
 
+def disconnect(user_id: str, provider: str) -> None:
+    """Stop syncing. Imported observations are kept as history (deleting them is the Phase 13 workflow)."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE integration_connections SET status = 'disconnected', disconnected_at = now() "
+                    "WHERE user_id = %s AND provider = %s AND status <> 'disconnected'", (user_id, provider))
+        if not cur.rowcount:
+            raise SyncRefused(404, "No active connection for this provider.")
+
+
 def _connection(cur, cid) -> dict:
     cur.execute("SELECT id::text AS id, provider, external_username, status, connected_at, last_attempt_at, "
                 "last_success_at FROM integration_connections WHERE id = %s", (cid,))

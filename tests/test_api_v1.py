@@ -42,7 +42,7 @@ def error_of(r, status, code):
 
 
 PROTECTED = [("get", "/me"), ("put", "/me/profile"), ("get", "/integrations"), ("put", "/integrations/github"),
-             ("post", "/integrations/github/sync"), ("get", "/sync-runs?provider=github"), ("get", f"/sync-runs/{uuid.uuid4()}"),
+             ("delete", "/integrations/github"), ("post", "/integrations/github/sync"), ("get", "/sync-runs?provider=github"), ("get", f"/sync-runs/{uuid.uuid4()}"),
              ("get", "/me/data-quality"), ("post", "/assessments"), ("get", "/assessments"),
              ("get", f"/assessments/{uuid.uuid4()}"), ("get", f"/assessments/{uuid.uuid4()}/evidence"),
              ("post", "/me/data-requests/export"), ("get", "/me/data-requests")]
@@ -116,6 +116,15 @@ def test_sync_refusals_are_enveloped(user, monkeypatch):
     error_of(r, 429, "rate_limited")
     assert int(r.headers["retry-after"]) > 0
     error_of(user.get(f"/sync-runs/{uuid.uuid4()}"), 404, "not_found")
+
+
+def test_disconnect_hides_the_connection_and_is_owner_scoped(user):
+    other = U()
+    error_of(other.delete("/integrations/github"), 404, "not_found")
+    assert user.delete("/integrations/github").status_code == 204
+    assert user.get("/integrations").json()["items"] == []
+    error_of(user.delete("/integrations/github"), 404, "not_found")
+    error_of(user.post("/integrations/github/sync"), 404, "not_found")
 
 
 def test_data_quality_summarises_quarantine(user):

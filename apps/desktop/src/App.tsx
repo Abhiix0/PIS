@@ -2,7 +2,12 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { ConnectionProvider, useConnection } from "./connection";
 import { Button, ErrorState, Loading } from "./components/ui";
 import { SessionProvider, useSession } from "./auth/session";
+import Assessment from "./screens/Assessment";
 import Dashboard from "./screens/Dashboard";
+import History from "./screens/History";
+import Integrations from "./screens/Integrations";
+import Overview from "./screens/Overview";
+import Plan from "./screens/Plan";
 
 function Status() {
   const { status } = useConnection();
@@ -51,14 +56,24 @@ function Shell() {
         <Status />
       </header>
       <nav aria-label="Primary">
-        <NavLink to="/dashboard">Dashboard</NavLink>
+        <NavLink to="/overview">Overview</NavLink>
+        <NavLink to="/integrations">Integrations</NavLink>
+        <NavLink to="/assessment">Assessment</NavLink>
+        <NavLink to="/plan">Development plan</NavLink>
+        <NavLink to="/history">History</NavLink>
+        <NavLink to="/dashboard">Profile</NavLink>
         <NavLink to="/settings">Settings</NavLink>
       </nav>
       <main>
         <Routes>
+          <Route path="/overview" element={<Overview />} />
+          <Route path="/integrations" element={<Integrations />} />
+          <Route path="/assessment" element={<Assessment />} />
+          <Route path="/plan" element={<Plan />} />
+          <Route path="/history" element={<History />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/overview" replace />} />
         </Routes>
       </main>
     </div>

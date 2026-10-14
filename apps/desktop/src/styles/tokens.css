@@ -135,3 +135,16 @@ body {
 .pill.checking {
   color: var(--muted);
 }
+.muted {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+table {
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}

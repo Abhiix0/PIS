@@ -91,6 +91,14 @@ def connect(provider: Provider, body: ConnectIn, p: Principal = Depends(current_
         _refused(e)
 
 
+@router.delete("/integrations/{provider}", status_code=204, tags=["Integrations"])
+def disconnect(provider: Provider, p: Principal = Depends(current_principal)):
+    try:
+        sync.disconnect(p.user_id, provider)
+    except sync.SyncRefused as e:
+        _refused(e)
+
+
 @router.post("/integrations/{provider}/sync", status_code=202, tags=["Sync"], dependencies=[Depends(expensive)])
 def start_sync(provider: Provider, tasks: BackgroundTasks, response: Response, p: Principal = Depends(current_principal)):
     """Starts a sync and returns at once with a run id; poll GET /sync-runs/{id} until status != 'running'.

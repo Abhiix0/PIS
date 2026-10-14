@@ -116,7 +116,7 @@ export default function Dashboard() {
   const { profile, items } = data;
   return (
     <>
-      <h1>Dashboard</h1>
+      <h1>Profile</h1>
       <section aria-labelledby="h-profile">
         <h2 id="h-profile">Profile</h2>
         {!profile || editing ? (
@@ -147,7 +147,7 @@ export default function Dashboard() {
         {items.length === 0 ? (
           <Empty
             title="No integrations connected"
-            hint="Connecting GitHub or LeetCode is built in a later phase."
+            hint="Connect GitHub or LeetCode from the Integrations screen."
           />
         ) : (
           <ul>
