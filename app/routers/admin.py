@@ -6,7 +6,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import require_operator, expensive
+from app.auth import Principal, require_operator, expensive
+from ml import bundle
 
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_operator), Depends(expensive)])
 
@@ -18,64 +19,37 @@ _retrain_status: dict = {"state": "idle", "last_ran": None, "error": None, "metr
 
 
 def _run_retrain():
+    """Train a candidate bundle. Never touches the active model: approval and activation are separate operator steps."""
     global _retrain_status
     _STAGING_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Step 1: recompute features (full-table batch)
+        # Step 1: recompute features (full-table batch); saves scaler.pkl, which travels with the bundle
         from features.compute import run_feature_sql, load_features, scale_features
         run_feature_sql()
-        raw    = load_features()
-        scale_features(raw)  # saves scaler.pkl to models/ directly (needed for training)
+        scale_features(load_features())
 
-        # Step 2: train into staging directory
+        # Step 2: train into the staging directory
         import ml.train as trainer
-        original_dir   = trainer.MODELS_DIR
-        trainer.MODELS_DIR = _STAGING_DIR
-
         _, X, y_score, y_cat = trainer.load_data()
         reg = trainer.train_regressor(X, y_score)
         clf = trainer.train_classifier(X, y_cat)
         importances = trainer.export_importances(reg, clf, trainer.FEATURE_COLS)
+        shutil.copy(_LIVE_DIR / "scaler.pkl", _STAGING_DIR / "scaler.pkl")
 
-        trainer.MODELS_DIR = original_dir  # restore
-
-        # Step 3: copy scaler into staging for validation
-        live_scaler = _LIVE_DIR / "scaler.pkl"
-        if live_scaler.exists():
-            shutil.copy(live_scaler, _STAGING_DIR / "scaler.pkl")
-
-        # Step 4: smoke-test staging models against all students
-        import joblib, pandas as pd
-        test_reg     = joblib.load(_STAGING_DIR / "regressor.pkl")
-        test_clf     = joblib.load(_STAGING_DIR / "classifier.pkl")
-        test_scaler  = joblib.load(_STAGING_DIR / "scaler.pkl")
-
-        from features.compute import load_features as lf
-        df_check = lf()
-        FEATURE_COLS = trainer.FEATURE_COLS
-        X_check = df_check[FEATURE_COLS]
-        X_scaled = test_scaler.transform(X_check)
-        import numpy as np
-        X_scaled = np.clip(X_scaled, 0.0, 1.0)
-        test_reg.predict(X_scaled)   # raises if broken
-        test_clf.predict(X_scaled)
-
-        # Step 5: atomic swap — move staging files into live directory
-        for f in _STAGING_DIR.iterdir():
-            if f.is_file():
-                f.rename(_LIVE_DIR / f.name)
-
-        # Capture metrics for status endpoint
+        # Step 3: freeze + smoke-test + register as a candidate (rejected if the smoke test fails)
+        from ml.bundle import create_candidate
         reg_imp = importances.get('regressor', {})
+        version = create_candidate(_STAGING_DIR, {"label_origin": "synthetic_formula", "students": len(X)})
         _retrain_status = {
             "state":    "completed",
             "last_ran": datetime.utcnow().isoformat(),
             "error":    None,
             "metrics":  {
+                "candidate_version": version,
                 "top_feature":       max(reg_imp, key=reg_imp.get) if reg_imp else None,
                 "top_importance":    round(max(reg_imp.values()), 3) if reg_imp else None,
-                "students_validated": len(df_check),
+                "students_trained":  len(X),
             },
         }
 
@@ -86,7 +60,7 @@ def _run_retrain():
             "error":    str(e),
             "metrics":  {},
         }
-        # Staging is left intact for debugging; live models are untouched
+        # The active model is untouched
 
     finally:
         # Always release the lock
@@ -101,7 +75,7 @@ def trigger_retrain():
     """Trigger a background model retrain.
 
     - Non-blocking: returns 202 immediately
-    - Safe: writes to models/staging/, validates, then atomically swaps
+    - Safe: registers a candidate bundle only; approve + activate via /admin/models/*
     - Idempotent: returns 409 if a retrain is already running
     """
     if not _retrain_lock.acquire(blocking=False):
@@ -118,3 +92,32 @@ def trigger_retrain():
 def retrain_status():
     """Poll retrain progress. States: idle | running | completed | failed."""
     return _retrain_status
+
+
+def _guard(fn, *args):
+    try:
+        return fn(*args)
+    except bundle.BundleError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.get("/models")
+def list_models():
+    return bundle.list_versions()
+
+
+@router.post("/models/{version}/approve")
+def approve_model(version: str, note: str = "", p: Principal = Depends(require_operator)):
+    _guard(bundle.approve, version, p.subject, note)
+    return {"version": version, "status": "approved"}
+
+
+@router.post("/models/{version}/activate")
+def activate_model(version: str, p: Principal = Depends(require_operator)):
+    _guard(bundle.activate, version, p.subject)
+    return {"version": version, "status": "active"}
+
+
+@router.post("/models/rollback")
+def rollback_model(p: Principal = Depends(require_operator)):
+    return {"version": _guard(bundle.rollback, p.subject), "status": "active"}

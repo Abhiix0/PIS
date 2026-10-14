@@ -14,6 +14,9 @@ python -m features.compute
 echo Training ML models
 python -m ml.train
 
+echo Activating first model if none is active
+python -m ml.bundle bootstrap
+
 echo Running initial predictions
 python -m ml.predict
 

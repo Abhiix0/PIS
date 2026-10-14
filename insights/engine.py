@@ -1,10 +1,8 @@
-import json
 import pandas as pd
 from pathlib          import Path
 from ingest.db_connection import get_connection
-from insights.rules   import RULES
-
-IMPORTANCES_PATH = Path('models/feature_importances.json')
+from insights.rules   import RULES, RULES_VERSION
+from ml.bundle        import load_active
 
 
 class InsightEngine:
@@ -46,10 +44,12 @@ class InsightEngine:
                 return {"tier": tier_name, "examples": examples, "focus": focus}
         return None
 
-    def __init__(self):
-        # Load importances once at instantiation — not on every call
-        raw = json.loads(IMPORTANCES_PATH.read_text())
-        self.importances = raw['regressor']  # use regressor importances
+    @property
+    def importances(self) -> dict:
+        # Ranking weights from the active model bundle (regressor importances); not causal. Loaded on first use.
+        if not hasattr(self, '_importances'):
+            self._importances = load_active().importances['regressor']
+        return self._importances
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -242,6 +242,7 @@ class InsightEngine:
                     'message':       msg,
                     'recommendation': rule.recommendation,
                     'raw_value':     round(value, 3),
+                    'basis':         f"rules v{RULES_VERSION}: {rule.feature} {rule.direction} {rule.threshold} (observed {round(value, 3)})",
                     'importance':    self.importances.get(rule.feature, 0.0),
                 })
             else:
@@ -271,6 +272,8 @@ class InsightEngine:
                 'tier':           tiers[min(i, len(tiers) - 1)],
                 'area':           w['label'],
                 'action':         w['recommendation'],
+                'basis':          w['basis'],
+                'limitation':     'Rule-based preparation guidance from public activity counts; it does not predict hiring outcomes.',
                 'why_it_matters': self._IMPORTANCE_EXPLANATIONS.get(
                     w['feature'],
                     f"Importance score: {w['importance']:.3f}",

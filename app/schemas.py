@@ -43,8 +43,11 @@ class FeatureResponse(BaseModel):
 
 class PredictionResponse(BaseModel):
     student_id:      int
-    readiness_score: float
-    category:        str
+    assessment_type: str = "ml_readiness_proxy"  # or "insufficient_evidence" (then no score)
+    readiness_score: Optional[float] = None
+    category:        Optional[str] = None
+    reason:          Optional[str] = None
+    model_version:   Optional[str] = None
     last_updated:    Optional[datetime]
 
     model_config = ConfigDict(from_attributes=True)
@@ -55,6 +58,8 @@ class RecommendationItem(BaseModel):
     area:           str
     action:         str
     why_it_matters: str
+    basis:          Optional[str] = None
+    limitation:     Optional[str] = None
 
 class WeaknessItem(BaseModel):
     feature:        str

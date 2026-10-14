@@ -12,11 +12,9 @@ from sklearn.metrics import (
 )
 from ml.labels import generate_labels
 
-MODELS_DIR = Path('models')
-FEATURE_COLS = [
-    'cgpa', 'total_problems', 'avg_difficulty',
-    'consistency_score', 'commit_frequency'
-]
+from ml.bundle import FEATURE_COLS, create_candidate
+
+MODELS_DIR = Path('models/staging')  # training never writes live files; create_candidate freezes a bundle
 
 def load_data():
     """Load and label the featured dataset."""
@@ -144,7 +142,7 @@ def export_importances(regressor, classifier, feature_names):
 
 if __name__ == "__main__":
     # 1. Initialize
-    MODELS_DIR.mkdir(exist_ok=True)
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
     df, X, y_score, y_cat = load_data()
 
     print("\nWARNING: labels are SYNTHETIC (formula + noise). Demo model only; not a placement predictor.")
@@ -160,3 +158,9 @@ if __name__ == "__main__":
     
     # 4. Export bridge for Insight Engine
     export_importances(regressor, classifier, FEATURE_COLS)
+
+    # 5. Freeze a candidate bundle (scaler fitted by features.compute travels with the models).
+    # It is NOT active: approve and activate it explicitly (python -m ml.bundle ...).
+    import shutil
+    shutil.copy(Path('models/scaler.pkl'), MODELS_DIR / 'scaler.pkl')
+    print("Candidate bundle:", create_candidate(MODELS_DIR, {"label_origin": "synthetic_formula"}))

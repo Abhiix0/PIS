@@ -57,6 +57,6 @@ def test_health_detailed_returns_components():
     data = r.json()
     assert "status" in data
     assert "database" in data
-    assert "models" in data
+    assert "model_version" in data
     assert "student_count" in data
     assert data["student_count"] >= 8

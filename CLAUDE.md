@@ -25,7 +25,7 @@ Placement Intelligence System (PIS) scores student **placement-readiness** from 
 | `ml/` | `labels.py` (constructed labels), `train.py`, `predict.py` |
 | `insights/` | `rules.py` (raw-value thresholds), `engine.py` (ranking by feature importance, composite patterns) |
 | `dashboard/` | `app.py`, `api_client.py` (all HTTP calls live here) |
-| `models/` | Committed `.pkl` artifacts + `feature_importances.json` (`models/staging/` used by retrain) |
+| `models/` | `bundles/<version>/` (immutable model bundles, registry in `model_versions`; `ml/bundle.py`), `staging/` for training output. Legacy top-level `.pkl` are unused |
 | `tests/` | pytest; see below |
 | `venv/` | Local virtualenv, git-ignored; ignore it |
 
@@ -41,7 +41,7 @@ make test                       # pytest inside api container (docker-compose ex
 make test-local                 # pytest tests/ -v --tb=short (needs live DB + models/)
 make pipeline-all               # POST /pipeline/batch for students 1-8
 make health | make logs | make seed
-python -m features.compute && python -m ml.train && python -m ml.predict   # entrypoint.sh boot order, then uvicorn app.main:app
+python -m features.compute && python -m ml.train && python -m ml.bundle bootstrap && python -m ml.predict   # entrypoint.sh boot order (train makes a candidate; activate via ml.bundle), then uvicorn app.main:app
 # No DB/models needed (23 passed, using venv/Scripts/python.exe -m pytest) (ran):
 pytest tests/test_core.py tests/test_insights.py tests/test_github_api.py tests/test_leetcode_api.py
 ```

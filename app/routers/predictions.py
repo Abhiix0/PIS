@@ -20,8 +20,11 @@ def run_prediction(student_id: int):
         result = predict(student_id)
         return {
             "student_id":      student_id,
+            "assessment_type": result["assessment_type"],
             "readiness_score": result["readiness_score"],
             "category":        result["category"],
+            "reason":          result["reason"],
+            "model_version":   result["model_version"],
             "last_updated":    result["predicted_at"],
         }
     except ValueError as e:

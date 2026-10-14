@@ -1,100 +1,115 @@
-import joblib
+import json
+import math
+import threading
 import pandas as pd
-from pathlib  import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from ingest.db_connection import get_connection
+from ml.bundle import FEATURE_COLS, SCHEMA_VERSION, CATEGORIES, load_active
 
-FEATURE_COLS = [
-    'cgpa', 'total_problems', 'avg_difficulty',
-    'consistency_score', 'commit_frequency'
-]
+ML_TYPE, INSUFFICIENT_TYPE = 'ml_readiness_proxy', 'insufficient_evidence'
+_slots = threading.BoundedSemaphore(4)  # bounds concurrent inference; the models are loaded once per active version
 
-# Load models once at module level — not on every prediction call
-_regressor  = joblib.load(Path('models/regressor.pkl'))
-_classifier = joblib.load(Path('models/classifier.pkl'))
-_scaler     = joblib.load(Path('models/scaler.pkl'))
-
-def _fetch_scaled_features(student_id: int) -> pd.DataFrame:
-    """Pull this student's scaled features from the DB.
-    Applies the same Min-Max scaling used in Phase 3
-    by reading from features_scaled.csv as reference.
-    """
+def _fetch_raw_features(student_id: int) -> dict | None:
     query = """
-        SELECT
-            s.cgpa,
-            f.total_problems,
-            f.avg_difficulty,
-            f.consistency_score,
-            f.commit_frequency
+        SELECT s.cgpa, f.total_problems, f.avg_difficulty,
+               f.consistency_score, f.commit_frequency, f.computed_at
         FROM  students s
         JOIN  features  f ON s.id = f.student_id
         WHERE s.id = %(student_id)s
     """
     with get_connection() as conn:
         df = pd.read_sql(query, conn, params={'student_id': student_id})
+    return None if df.empty else df.iloc[0].to_dict()
 
-    if df.empty:
-        raise ValueError(f"No features found for student_id={student_id}. "
-                         "Run features/compute.py first.")
-
-    # Scale using the fitted scaler saved during feature computation
-    df[FEATURE_COLS] = _scaler.transform(df[FEATURE_COLS])
-    df[FEATURE_COLS] = df[FEATURE_COLS].clip(0.0, 1.0)  # guard against out-of-range real data
-    return df[FEATURE_COLS]
+def _insufficient_reason(raw: dict | None) -> str | None:
+    if raw is None:
+        return "No computed features for this student yet."
+    bad = [c for c in FEATURE_COLS if raw[c] is None or not math.isfinite(float(raw[c]))]
+    if bad:
+        return f"Missing or non-finite inputs: {', '.join(bad)}."
+    if not 0 <= float(raw['cgpa']) <= 10:
+        return "CGPA is outside the supported 0-10 range."
+    return None
 
 def predict(student_id: int) -> dict:
-    """Run both models for a student and save result to predictions table.
+    """Assess one student with the active model bundle and record an immutable snapshot.
 
-    Returns:
-        dict with student_id, readiness_score, category, predicted_at
+    Returns an `ml_readiness_proxy` result, or an `insufficient_evidence` result with no score when the
+    inputs cannot support one. Raises if the active bundle is missing/incompatible or the output is invalid.
     """
-    features = _fetch_scaled_features(student_id)
+    raw = _fetch_raw_features(student_id)
+    reason = _insufficient_reason(raw)
+    bundle = load_active()
+    snapshot = {'feature_schema_version': SCHEMA_VERSION, 'model_version': bundle.version}
+    score = category = None
+    if reason is None:
+        values = {c: float(raw[c]) for c in FEATURE_COLS}
+        snapshot['features'] = values
+        snapshot['features_computed_at'] = str(raw['computed_at'])
+        x = pd.DataFrame([values], columns=FEATURE_COLS)
+        scaled = bundle.scaler.transform(x)
+        snapshot['clipped'] = [c for c, v in zip(FEATURE_COLS, scaled[0]) if not 0.0 <= v <= 1.0]
+        x = pd.DataFrame(scaled.clip(0.0, 1.0), columns=FEATURE_COLS)  # guard against out-of-range real data
+        if not _slots.acquire(timeout=5):
+            raise RuntimeError("Inference capacity exhausted; retry shortly")
+        try:
+            score = float(bundle.regressor.predict(x)[0])
+            category = str(bundle.classifier.predict(x)[0])
+        finally:
+            _slots.release()
+        if not math.isfinite(score) or category not in CATEGORIES:
+            raise ValueError(f"Model {bundle.version} produced an invalid output")
+        score = round(max(0.0, min(100.0, score)), 2)  # float precision can give 100.0001
 
-    score    = round(float(_regressor.predict(features)[0]), 2)
-    # Clamp to valid range — float precision can give 100.0001
-    score    = max(0.0, min(100.0, score))
-    category = str(_classifier.predict(features)[0])
-
-    _save_prediction(student_id, score, category)
-
-    return {
-        'student_id':     student_id,
+    result = {
+        'student_id':      student_id,
+        'assessment_type': INSUFFICIENT_TYPE if reason else ML_TYPE,
         'readiness_score': score,
         'category':        category,
-        'predicted_at':    datetime.utcnow().isoformat(),
+        'reason':          reason,
+        'model_version':   bundle.version,
+        'input_snapshot':  snapshot,
+        'predicted_at':    datetime.now(timezone.utc).isoformat(),
     }
+    _save_prediction(result)
+    return result
 
-def _save_prediction(student_id: int, score: float, category: str):
-    """Upsert current prediction and append an immutable history row."""
+def _save_prediction(r: dict):
+    """Upsert the latest assessment and append an immutable history row."""
+    p = {'sid': r['student_id'], 'score': r['readiness_score'], 'cat': r['category'], 'type': r['assessment_type'],
+         'ver': r['model_version'], 'snap': json.dumps(r['input_snapshot']), 'reason': r['reason']}
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Keep the latest prediction in the predictions table (upsert)
             cur.execute("""
                 INSERT INTO predictions
-                    (student_id, readiness_score, category, last_updated)
+                    (student_id, readiness_score, category, last_updated, assessment_type, model_version, input_snapshot, reason)
                 VALUES
-                    (%(sid)s, %(score)s, %(cat)s, NOW())
+                    (%(sid)s, %(score)s, %(cat)s, NOW(), %(type)s, %(ver)s, %(snap)s::jsonb, %(reason)s)
                 ON CONFLICT (student_id) DO UPDATE SET
                     readiness_score = EXCLUDED.readiness_score,
                     category        = EXCLUDED.category,
-                    last_updated    = NOW()
-            """, {'sid': student_id, 'score': score, 'cat': category})
+                    last_updated    = NOW(),
+                    assessment_type = EXCLUDED.assessment_type,
+                    model_version   = EXCLUDED.model_version,
+                    input_snapshot  = EXCLUDED.input_snapshot,
+                    reason          = EXCLUDED.reason
+            """, p)
             # Append to history at most once per hour — prevents rapid /predict
             # calls from flooding the table and corrupting 7-day velocity logic.
             cur.execute("""
                 INSERT INTO prediction_history
-                    (student_id, readiness_score, category, recorded_at)
-                SELECT %(sid)s, %(score)s, %(cat)s, NOW()
+                    (student_id, readiness_score, category, recorded_at, assessment_type, model_version, input_snapshot, reason)
+                SELECT %(sid)s, %(score)s, %(cat)s, NOW(), %(type)s, %(ver)s, %(snap)s::jsonb, %(reason)s
                 WHERE NOT EXISTS (
                     SELECT 1 FROM prediction_history
                     WHERE  student_id = %(sid)s
                       AND  recorded_at > NOW() - INTERVAL '1 hour'
                 )
-            """, {'sid': student_id, 'score': score, 'cat': category})
+            """, p)
 
 if __name__ == "__main__":
     # Predict for all 8 students and print results
     for sid in range(1, 9):
         result = predict(sid)
-        print(f"Student {sid:2d} → score: {result['readiness_score']:6.2f}  "
-              f"category: {result['category']}")
+        print(f"Student {sid:2d} → {result['assessment_type']}  score: {result['readiness_score']}  "
+              f"category: {result['category']}  model: {result['model_version']}")

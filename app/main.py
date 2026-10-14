@@ -9,15 +9,10 @@ from fastapi.responses import JSONResponse
 import config
 from ingest.db_connection import get_connection, close_pool
 from ingest.migrate import pending
+from ml.bundle import load_active, active_version
 from app.logger import logger
 from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles, integrations
 
-REQUIRED_MODEL_FILES = [
-    Path("models/regressor.pkl"),
-    Path("models/classifier.pkl"),
-    Path("models/scaler.pkl"),
-    Path("models/feature_importances.json"),
-]
 
 
 def check_db_connection() -> bool:
@@ -51,12 +46,12 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 errors.append(f"Could not check migrations: {type(e).__name__}")
 
-    missing_models = [str(f) for f in REQUIRED_MODEL_FILES if not f.exists()]
-    if missing_models:
-        errors.append(
-            f"Missing model files: {missing_models}. "
-            f"Run: python -m ml.train && python -m ml.predict"
-        )
+    active_model = None
+    if not errors:
+        try:
+            active_model = load_active().version  # verifies checksums and feature schema
+        except Exception as e:
+            errors.append(f"No usable active model: {e}. Train, then: python -m ml.bundle approve/activate <version> --by <you>")
 
     if errors:
         for error in errors:
@@ -71,7 +66,7 @@ async def lifespan(app: FastAPI):
 
     print(f"PIS API started successfully")
     print(f"  Database: connected")
-    print(f"  Models:   {len(REQUIRED_MODEL_FILES)} files verified")
+    print(f"  Model:    {active_model} (verified)")
     print(f"  Docs:     http://localhost:8000/docs")
 
     yield
@@ -126,7 +121,10 @@ def health():
 def health_detailed():
     """Detailed health check showing system component status."""
     db_ok  = check_db_connection()
-    models = {f.stem: f.exists() for f in REQUIRED_MODEL_FILES}
+    try:
+        model_version = active_version()
+    except Exception:
+        model_version = None
 
     features_freshness = None
     student_count      = 0
@@ -148,11 +146,11 @@ def health_detailed():
     uptime_seconds = round(time_module.time() - _startup_time)
 
     return {
-        "status":             "ok" if db_ok and all(models.values()) else "degraded",
+        "status":             "ok" if db_ok and model_version else "degraded",
         "version":            app.version,
         "uptime_seconds":     uptime_seconds,
         "database":           "connected" if db_ok else "disconnected",
-        "models":             models,
+        "model_version":       model_version,
         "features_freshness": features_freshness,
         "student_count":      student_count,
     }

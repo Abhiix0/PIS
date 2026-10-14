@@ -6,6 +6,8 @@
 
 from dataclasses import dataclass
 
+RULES_VERSION = '1'  # bump when any threshold or message changes
+
 @dataclass
 class Rule:
     feature:        str    # which feature this rule watches
