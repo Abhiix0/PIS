@@ -1,109 +1,165 @@
+"""GitHub adapter: public REST data -> typed observations.
+
+Only public data of a public username is read. Any failure raises ProviderError; nothing here ever
+turns a failed request into a count. See docs/phase6/ingestion.md for what each observation means.
+"""
 import os
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, date
-from typing import Optional
+
+from ingest.provider import Observation, ProviderError
 
 GITHUB_API_BASE = "https://api.github.com"
+PAYLOAD_VERSION = "github-rest-v1"
+USERNAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")  # also keeps the name safe to put in a URL path
+MAX_REPOS = 10      # each repo costs one API call; unauthenticated budget is 60 requests/hour
+_PAGE_SIZE = 100
+_MAX_PAGES = 3
+_ATTEMPTS = 3       # bounded retries, only for timeouts and 5xx
+_BACKOFF = 1.0      # seconds, doubled per attempt
 
 
-def _get_headers() -> dict:
-    """Return auth headers. Works without token but rate-limited to 60 req/hr."""
-    token = os.getenv("GITHUB_TOKEN", "")  # read on every call — never stale
-    headers = {"Accept": "application/vnd.github.v3+json"}
+def _headers() -> dict:
+    headers = {"Accept": "application/vnd.github+json"}
+    token = os.getenv("GITHUB_TOKEN", "")  # optional server-side token; never sent to or stored for clients
     if token:
-        headers["Authorization"] = f"token {token}"
+        headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
-def _get_repo_commit_count(owner: str, repo: str) -> int:
-    """Get total commit count for a repo using the pagination trick.
-    GitHub returns total count in the Link header when per_page=1.
-    """
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits"
-    params = {"per_page": 1}
-    resp = requests.get(url, headers=_get_headers(), params=params, timeout=10)
-    if resp.status_code == 409:  # empty repo
+def _get(url: str, params: dict) -> requests.Response:
+    last = ProviderError("unavailable")
+    for attempt in range(_ATTEMPTS):
+        try:
+            resp = requests.get(url, headers=_headers(), params=params, timeout=10)
+            if resp.status_code < 500:
+                return resp
+        except (requests.Timeout, requests.ConnectionError):
+            pass
+        if attempt < _ATTEMPTS - 1:
+            time.sleep(_BACKOFF * 2 ** attempt)
+    raise last
+
+
+def _check(resp: requests.Response, allow=(200,)) -> None:
+    """Map an HTTP status to a ProviderError. Rate limits are reported, never retried."""
+    s = resp.status_code
+    if s in allow:
+        return
+    retry = resp.headers.get("Retry-After")
+    retry = int(retry) if isinstance(retry, str) and retry.isdigit() else None
+    if s == 404:
+        raise ProviderError("not_found")
+    if s == 429 or (s == 403 and (resp.headers.get("X-RateLimit-Remaining") == "0" or retry is not None)):
+        raise ProviderError("rate_limited", retry_after=retry)
+    if s in (401, 403):
+        raise ProviderError("forbidden")
+    raise ProviderError("unavailable", f"HTTP {s}")
+
+
+def _json(resp: requests.Response):
+    try:
+        return resp.json()
+    except ValueError:
+        raise ProviderError("malformed", "response is not JSON")
+
+
+def _list_repos(username: str) -> tuple[list[dict], bool]:
+    """Public, non-fork repos, most recently pushed first. Returns (repos, truncated)."""
+    repos, truncated = [], False
+    for page in range(1, _MAX_PAGES + 1):
+        resp = _get(f"{GITHUB_API_BASE}/users/{username}/repos",
+                    {"per_page": _PAGE_SIZE, "page": page, "type": "owner", "sort": "pushed"})
+        _check(resp)
+        batch = _json(resp)
+        if not isinstance(batch, list) or not all(isinstance(r, dict) for r in batch):
+            raise ProviderError("malformed", "repo list has unexpected shape")
+        repos += [r for r in batch if not r.get("fork")]
+        if len(batch) < _PAGE_SIZE:
+            break
+        if page == _MAX_PAGES:
+            truncated = True
+    if len(repos) > MAX_REPOS:
+        repos, truncated = repos[:MAX_REPOS], True
+    return repos, truncated
+
+
+def _commit_count(username: str, repo: str) -> int:
+    """Commits authored by `username` in the repo, via the page count of a 1-per-page listing."""
+    resp = _get(f"{GITHUB_API_BASE}/repos/{username}/{repo}/commits", {"per_page": 1, "author": username})
+    if resp.status_code == 409:  # empty repository
         return 0
-    resp.raise_for_status()
-    link = resp.headers.get("Link", "")
-    if 'rel="last"' in link:
-        # Extract page number from: <...?page=N>; rel="last"
-        match = re.search(r'page=(\d+)>; rel="last"', link)
-        if match:
-            return int(match.group(1))
-    return len(resp.json())  # single page, count items
+    _check(resp)
+    m = re.search(r'[?&]page=(\d+)[^>]*>;\s*rel="last"', resp.headers.get("Link", ""))
+    if m:
+        return int(m.group(1))
+    body = _json(resp)
+    if not isinstance(body, list):
+        raise ProviderError("malformed", "commit list has unexpected shape")
+    return len(body)
+
+
+def _pushed_at(repo: dict) -> datetime | None:
+    raw = repo.get("pushed_at")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        raise ProviderError("malformed", "pushed_at is not an ISO timestamp")
+
+
+def fetch_github_observations(username: str) -> tuple[list[Observation], bool]:
+    """Return (observations, partial). partial=True means some repos were skipped or truncated.
+
+    Raises ProviderError if the user cannot be read at all, or every per-repo lookup failed.
+    """
+    if not USERNAME_RE.match(username or ""):
+        raise ProviderError("not_found", "invalid GitHub username")
+    repos, partial = _list_repos(username)
+    names = []
+    for r in repos:
+        if not isinstance(r.get("name"), str) or not r["name"]:
+            raise ProviderError("malformed", "repo without a name")
+        names.append(r["name"])
+
+    def count(name):
+        try:
+            return _commit_count(username, name), None
+        except ProviderError as e:
+            return None, e
+
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        counts = list(ex.map(count, names))
+    if names and all(c is None for c, _ in counts):
+        raise counts[0][1]  # nothing usable came back: fail the run rather than report an empty profile
+
+    obs = [Observation("github", "github_public_repo_count", len(repos), payload_version=PAYLOAD_VERSION)]
+    for repo, (n, err) in zip(repos, counts):
+        if err is not None:
+            partial = True
+            continue
+        pushed = _pushed_at(repo)
+        obs.append(Observation(
+            "github", "github_repo_commit_count", n, source_object_id=repo["name"],
+            event_at=pushed, event_at_precision="repo_push" if pushed else "unknown",
+            payload_version=PAYLOAD_VERSION))
+    return obs, partial
 
 
 def fetch_github_data(username: str) -> list[dict]:
-    """Fetch repository and commit data for a GitHub user.
+    """Legacy `students` shape: [{repo_name, commits, commit_date}] for repos with commits.
 
-    Returns a list of dicts ready to insert into github_activity:
-        [{'repo_name': str, 'commits': int, 'commit_date': date}, ...]
-
-    Fetches up to 10 most recently updated repos.
-    Gets total commit count per repo (not just last page).
-
-    Raises:
-        ValueError: if username not found on GitHub (404)
-        RuntimeError: if rate limited (403/429) or other API error
+    commit_date is the repo's last push date, not a commit date (see docs/phase6/ingestion.md).
+    Raises ProviderError on failure.
     """
-    # Step 1: fetch list of repos
-    url = f"{GITHUB_API_BASE}/users/{username}/repos"
-    params = {"per_page": 10, "sort": "updated", "type": "all"}
-    resp = requests.get(url, headers=_get_headers(), params=params, timeout=10)
-
-    if resp.status_code == 404:
-        raise ValueError(f"GitHub username '{username}' not found.")
-    if resp.status_code == 403:
-        raise RuntimeError(
-            "GitHub API rate limit exceeded. "
-            "Set GITHUB_TOKEN in .env to increase limit to 5000/hr."
-        )
-    if resp.status_code == 429:
-        retry = resp.headers.get("Retry-After", "60")
-        raise RuntimeError(f"GitHub API rate limited. Retry after {retry} seconds.")
-    resp.raise_for_status()
-
-    repos = resp.json()
-    if not repos:
-        return []
-
-    # Filter repos that are worth querying (skip empty forks, etc.)
-    # and pre-compute commit_date so we don't repeat the parse inside threads.
-    candidates = []
-    for repo in repos:
-        pushed_at_str = repo.get("pushed_at") or repo.get("updated_at")
-        if not pushed_at_str:
-            continue
-        commit_date = datetime.fromisoformat(
-            pushed_at_str.replace("Z", "+00:00")
-        ).date()
-        candidates.append((repo["name"], commit_date))
-
-    if not candidates:
-        return []
-
-    # Fetch commit counts for all repos in parallel — reduces N sequential
-    # HTTP calls (worst-case 100s) to ceil(N/5) batches (~3s for 10 repos).
-    records = []
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {
-            executor.submit(_get_repo_commit_count, username, repo_name): (repo_name, commit_date)
-            for repo_name, commit_date in candidates
-        }
-        for future in as_completed(futures):
-            repo_name, commit_date = futures[future]
-            try:
-                commit_count = future.result()
-            except Exception:
-                commit_count = 1  # safe fallback
-            if commit_count > 0:
-                records.append({
-                    "repo_name":   repo_name,
-                    "commits":     commit_count,
-                    "commit_date": commit_date,
-                })
-
-    return records
+    obs, _ = fetch_github_observations(username)
+    return [
+        {"repo_name": o.source_object_id, "commits": int(o.value_num), "commit_date": o.event_at.date()}
+        for o in obs
+        if o.observation_type == "github_repo_commit_count" and o.value_num > 0 and o.event_at
+    ]

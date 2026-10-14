@@ -1,133 +1,89 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from ingest.leetcode_api import fetch_leetcode_data, _parse_submission_stats
+import requests
+
+from ingest.leetcode_api import _parse_submission_stats, fetch_leetcode_observations
+from ingest.provider import ProviderError
 
 
-def _base_mock(counts=None) -> MagicMock:
-    """Build a standard mock response using only submitStats."""
+def gql(counts=None, status=200, body=None):
     if counts is None:
-        counts = [
-            {"difficulty": "Easy",   "count": 5},
-            {"difficulty": "Medium", "count": 4},
-            {"difficulty": "Hard",   "count": 1},
-        ]
-    mock = MagicMock()
-    mock.status_code = 200
-    mock.json.return_value = {
-        "data": {
-            "matchedUser": {
-                "username": "testuser",
-                "submitStats": {"acSubmissionNum": counts},
-            }
-        }
-    }
-    return mock
+        counts = [{"difficulty": "All", "count": 10}, {"difficulty": "Easy", "count": 5},
+                  {"difficulty": "Medium", "count": 4}, {"difficulty": "Hard", "count": 1}]
+    m = MagicMock()
+    m.status_code = status
+    m.json.return_value = body if body is not None else {
+        "data": {"matchedUser": {"username": "u", "submitStats": {"acSubmissionNum": counts}}}}
+    return m
 
 
-def test_parse_submission_stats_correct():
-    stats = [
-        {"difficulty": "Easy",   "count": 60},
-        {"difficulty": "Medium", "count": 70},
-        {"difficulty": "Hard",   "count": 20},
-    ]
-    result = _parse_submission_stats(stats)
-    assert result["easy"]   == 60
-    assert result["medium"] == 70
-    assert result["hard"]   == 20
+def test_returns_three_aggregates_and_no_per_problem_rows_or_dates():
+    with patch("requests.post", return_value=gql()):
+        obs, partial = fetch_leetcode_observations("testuser")
+    assert partial is False
+    assert {o.observation_type: o.value_num for o in obs} == {
+        "leetcode_solved_easy": 5, "leetcode_solved_medium": 4, "leetcode_solved_hard": 1}
+    assert all(o.granularity == "aggregate" and o.event_at is None and o.event_at_precision == "unknown" for o in obs)
 
 
-def test_fetch_leetcode_data_user_not_found():
-    mock = MagicMock()
-    mock.status_code = 200
-    mock.json.return_value = {"data": {"matchedUser": None}}
-    with patch("requests.post", return_value=mock):
-        with pytest.raises(ValueError, match="not found or profile is private"):
-            fetch_leetcode_data("definitely_not_a_real_user_xyz123")
+def test_username_is_a_graphql_variable_not_interpolated():
+    with patch("requests.post", return_value=gql()) as p:
+        fetch_leetcode_observations("testuser")
+    sent = p.call_args.kwargs["json"]
+    assert sent["variables"] == {"u": "testuser"} and "testuser" not in sent["query"]
 
 
-def test_fetch_leetcode_data_returns_records_and_source():
-    """fetch_leetcode_data must return (records, 'real_leetcode_stats')."""
-    with patch("requests.post", return_value=_base_mock()):
-        records, source = fetch_leetcode_data("testuser")
-
-    assert source == "real_leetcode_stats"
-    assert len(records) == 10  # 5 easy + 4 medium + 1 hard — exact, never inflated
-    assert all(r["difficulty"] in ["easy", "medium", "hard"] for r in records)
-    assert all("problem_id" in r for r in records)
-    assert all("solved_at" in r for r in records)
+def test_zero_solved_is_measured_zero():
+    zeros = [{"difficulty": d, "count": 0} for d in ("Easy", "Medium", "Hard")]
+    with patch("requests.post", return_value=gql(zeros)):
+        obs, _ = fetch_leetcode_observations("testuser")
+    assert all(o.value_num == 0 and o.value_state == "measured_zero" for o in obs)
 
 
-def test_total_count_never_exceeds_real_stats():
-    """Total records must equal exactly the sum of real LeetCode counts."""
-    counts = [
-        {"difficulty": "Easy",   "count": 12},
-        {"difficulty": "Medium", "count": 0},
-        {"difficulty": "Hard",   "count": 0},
-    ]
-    with patch("requests.post", return_value=_base_mock(counts=counts)):
-        records, _ = fetch_leetcode_data("testuser")
-
-    assert len(records) == 12, (
-        f"Expected exactly 12 records matching real stats, got {len(records)}"
-    )
+def test_parse_stats_missing_or_bad_count_is_malformed_not_zero():
+    with pytest.raises(ProviderError) as e:
+        _parse_submission_stats([{"difficulty": "Easy", "count": 3}, {"difficulty": "Medium", "count": 1}])
+    assert e.value.code == "malformed"
+    with pytest.raises(ProviderError):
+        _parse_submission_stats([{"difficulty": d, "count": "7"} for d in ("Easy", "Medium", "Hard")])
 
 
-def test_problem_ids_are_unique():
-    """No duplicate problem_ids — ON CONFLICT safety."""
-    with patch("requests.post", return_value=_base_mock()):
-        records, _ = fetch_leetcode_data("testuser")
-
-    ids = [r["problem_id"] for r in records]
-    assert len(ids) == len(set(ids)), "Duplicate problem_ids found"
-
-
-def test_difficulty_distribution_matches_stats():
-    """Records must reflect the exact difficulty counts from submitStats."""
-    with patch("requests.post", return_value=_base_mock()):
-        records, _ = fetch_leetcode_data("testuser")
-
-    easy_count   = sum(1 for r in records if r["difficulty"] == "easy")
-    medium_count = sum(1 for r in records if r["difficulty"] == "medium")
-    hard_count   = sum(1 for r in records if r["difficulty"] == "hard")
-
-    assert easy_count   == 5
-    assert medium_count == 4
-    assert hard_count   == 1
+@pytest.mark.parametrize("kw,code", [
+    (dict(body={"data": {"matchedUser": None}}), "not_found"),
+    (dict(status=429), "rate_limited"),
+    (dict(status=503), "unavailable"),
+    (dict(body={"errors": [{"message": "x"}]}), "malformed"),
+    (dict(body={"data": {"matchedUser": {"submitStats": {"acSubmissionNum": []}}}}), "malformed"),
+    (dict(body={"data": {"matchedUser": {"submitStats": None}}}), "malformed"),
+    (dict(body=["unexpected"]), "malformed"),
+])
+def test_failures_map_to_safe_codes(kw, code):
+    with patch("requests.post", return_value=gql(**kw)):
+        with pytest.raises(ProviderError) as e:
+            fetch_leetcode_observations("testuser")
+    assert e.value.code == code
 
 
-def test_fetch_leetcode_data_no_stats_raises():
-    """If submitStats is empty, raise ValueError."""
-    mock = MagicMock()
-    mock.status_code = 200
-    mock.json.return_value = {
-        "data": {
-            "matchedUser": {
-                "username": "testuser",
-                "submitStats": {"acSubmissionNum": []},
-            }
-        }
-    }
-    with patch("requests.post", return_value=mock):
-        with pytest.raises(ValueError, match="no submission stats available"):
-            fetch_leetcode_data("testuser")
+@pytest.mark.parametrize("exc", [requests.Timeout, requests.ConnectionError])
+def test_network_failure_is_unavailable(exc):
+    with patch("requests.post", side_effect=exc):
+        with pytest.raises(ProviderError) as e:
+            fetch_leetcode_observations("testuser")
+    assert e.value.code == "unavailable"
 
 
-def test_fetch_leetcode_data_zero_solved_returns_empty():
-    """User exists but solved 0 problems — return empty list."""
-    mock = _base_mock(counts=[
-        {"difficulty": "Easy",   "count": 0},
-        {"difficulty": "Medium", "count": 0},
-        {"difficulty": "Hard",   "count": 0},
-    ])
-    with patch("requests.post", return_value=mock):
-        records, source = fetch_leetcode_data("testuser")
-
-    assert records == []
-    assert source == "real_leetcode_stats"
+def test_non_json_is_malformed():
+    m = gql()
+    m.json.side_effect = ValueError()
+    with patch("requests.post", return_value=m):
+        with pytest.raises(ProviderError) as e:
+            fetch_leetcode_observations("testuser")
+    assert e.value.code == "malformed"
 
 
-def test_fetch_leetcode_api_timeout():
-    import requests as req_lib
-    with patch("requests.post", side_effect=req_lib.exceptions.Timeout):
-        with pytest.raises(RuntimeError, match="timed out"):
-            fetch_leetcode_data("anyuser")
+def test_bad_username_never_reaches_the_network():
+    with patch("requests.post") as p:
+        with pytest.raises(ProviderError):
+            fetch_leetcode_observations('x"){evil}')
+    assert p.call_count == 0

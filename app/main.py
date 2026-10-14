@@ -10,7 +10,7 @@ import config
 from ingest.db_connection import get_connection, close_pool
 from ingest.migrate import pending
 from app.logger import logger
-from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles
+from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles, integrations
 
 REQUIRED_MODEL_FILES = [
     Path("models/regressor.pkl"),
@@ -100,6 +100,7 @@ app.include_router(features.router, prefix="/features", tags=["features"])
 app.include_router(pipeline.router)
 app.include_router(admin.router)
 app.include_router(profiles.router)
+app.include_router(integrations.router)
 
 
 # ── Global exception handler — never leak raw tracebacks ─────────────

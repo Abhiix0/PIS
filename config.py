@@ -14,6 +14,9 @@ AUTH_JWKS_URL = os.getenv("AUTH_JWKS_URL", "")
 AUTH_ROLE_CLAIM = os.getenv("AUTH_ROLE_CLAIM", "pis_roles")  # list claim; "pis_operator" grants operator
 MAX_BODY_BYTES = 64 * 1024
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+# LeetCode has no official API and its terms are unverified (PRD 19#4): off until a human clears it.
+LEETCODE_INTEGRATION_ENABLED = os.getenv("LEETCODE_INTEGRATION_ENABLED", "false").strip().lower() == "true"
+SYNC_COOLDOWN_SECONDS = int(os.getenv("SYNC_COOLDOWN_SECONDS", "300"))  # per connection, counts failed attempts too
 
 # Values copied from .env.example / docs; never acceptable outside local/test.
 _PLACEHOLDERS = ("your-secret", "your_", "changeme", "pis_password", "pis_local_dev", "<password>")
