@@ -10,8 +10,8 @@ IMPORTANCES_PATH = Path('models/feature_importances.json')
 class InsightEngine:
 
     _IMPORTANCE_EXPLANATIONS = {
-        'total_problems':   "Problem-solving volume is the strongest predictor of "
-                            "placement readiness — companies screen on quantity before quality.",
+        'total_problems':   "Problem-solving volume has a high weight in this readiness proxy "
+                            "score; it is not validated as a predictor of placement outcomes.",
         'avg_difficulty':   "Problem depth matters more than count at the screening stage — "
                             "most interview questions are medium or hard difficulty.",
         'consistency_score': "Sustained daily effort builds retention; recruiters value "

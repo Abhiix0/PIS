@@ -164,7 +164,7 @@ A **5-minute cooldown** prevents redundant pipeline runs. Use `?force_refresh=tr
       "tier": "critical",
       "area": "low_dsa_volume",
       "action": "Solve 2–3 LeetCode problems daily. Target medium difficulty. Focus on arrays, strings, and trees first.",
-      "why_it_matters": "Problem-solving volume is the strongest predictor of placement readiness — companies screen on quantity before quality."
+      "why_it_matters": "Problem-solving volume carries a high weight in this tool's readiness proxy score; it is not validated as a predictor of placement outcomes."
     }
   ],
   "top_priority": "Solve 2–3 LeetCode problems daily. Target medium difficulty. Focus on arrays, strings, and trees first."
@@ -307,6 +307,6 @@ All external HTTP calls (GitHub, LeetCode) are mocked — no network access requ
 
 **Why two SQL variants for features** — `feature_engineering.sql` scans all rows (used at training time). `feature_engineering_single.sql` is parameterised to a single `student_id` (used in the live pipeline). This avoids O(n_students) work on every pipeline call.
 
-**Why Gaussian noise on labels** — Without noise, `R² ≈ 1.0` because the model memorises the weighted formula. Adding `σ=5` noise produces `R² ≈ 0.90` — more honest and defensible. Seed is fixed so labels are reproducible.
+**Why Gaussian noise on labels** — Labels are a weighted formula of the features, so they are synthetic. Noise (`σ=5`, fixed seed) only stops the model reproducing the formula exactly; it does not model placement-outcome variance. Reported R² measures how well the model re-learns that formula, not how well it predicts placement. See `docs/research/dataset-card.md`.
 
 **Why atomic model swap on retrain** — New models are trained to `models/staging/`, smoke-tested against all current students, then moved to `models/` only on success. Live models are never touched if the retrain fails.

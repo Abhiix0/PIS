@@ -11,10 +11,10 @@ WEIGHTS = {
     'commit_frequency': 20,
 }
 
-# Gaussian noise added to labels to simulate real-world placement outcome
-# variance. Without this, R² ≈ 1.0 because the model memorises the formula.
-# σ=5 produces R² ≈ 0.90 — more honest and defensible in an interview.
-# Seed is fixed so labels are reproducible across runs on the same dataset.
+# SYNTHETIC LABELS: a weighted formula of the features plus fixed-seed Gaussian noise.
+# The noise only stops a model reproducing the formula exactly (R2 = 1.0); it does NOT
+# represent placement-outcome variance. Never use these labels in real-world evaluation.
+LABEL_ORIGIN = 'synthetic_formula'
 _LABEL_NOISE_STD  = 5.0
 _LABEL_NOISE_SEED = 42
 

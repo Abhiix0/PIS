@@ -147,6 +147,7 @@ if __name__ == "__main__":
     MODELS_DIR.mkdir(exist_ok=True)
     df, X, y_score, y_cat = load_data()
 
+    print("\nWARNING: labels are SYNTHETIC (formula + noise). Demo model only; not a placement predictor.")
     print("\n── Label Distribution ──────────────────────")
     print(df['category'].value_counts().to_string())
 
