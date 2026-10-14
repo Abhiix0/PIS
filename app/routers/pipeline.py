@@ -1,11 +1,12 @@
 from app.logger import logger
-from fastapi         import APIRouter, HTTPException, Query
+from fastapi         import APIRouter, Depends, HTTPException, Query
+from app.auth        import require_operator, expensive
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.schemas     import PipelineResponse, BatchPipelineRequest
 from ingest.db_connection import get_connection
 from services.pipeline import run as run_pipeline
 
-router = APIRouter(prefix="/pipeline", tags=["Pipeline"])
+router = APIRouter(prefix="/pipeline", tags=["Pipeline"], dependencies=[Depends(require_operator), Depends(expensive)])
 
 
 @router.post("/batch", response_model=list[PipelineResponse])

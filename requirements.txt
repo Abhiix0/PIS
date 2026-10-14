@@ -13,3 +13,4 @@ requests==2.32.2
 streamlit==1.35.0
 plotly==5.22.0
 sqlalchemy==2.0.30
+PyJWT[crypto]==2.8.0

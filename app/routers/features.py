@@ -1,8 +1,9 @@
-from fastapi     import APIRouter, HTTPException
+from fastapi     import APIRouter, Depends, HTTPException
+from app.auth    import require_operator
 from app.schemas import FeatureResponse
 from ingest.db_connection import get_connection
 
-router = APIRouter(tags=["Features"])
+router = APIRouter(tags=["Features"], dependencies=[Depends(require_operator)])
 
 @router.get("/{student_id}", response_model=FeatureResponse)
 def get_features(student_id: int):

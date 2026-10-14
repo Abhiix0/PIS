@@ -7,10 +7,14 @@ load_dotenv()
 ENVIRONMENTS = ("local", "test", "staging", "production")
 APP_ENV = os.getenv("APP_ENV", "local").strip().lower()
 DATABASE_URL = os.getenv("DATABASE_URL")
-ADMIN_KEY = os.getenv("ADMIN_KEY", "")
+# Identity: tokens are issued by an external OIDC provider; the API only verifies them (RS256 via JWKS).
+AUTH_ISSUER = os.getenv("AUTH_ISSUER", "")
+AUTH_AUDIENCE = os.getenv("AUTH_AUDIENCE", "")
+AUTH_JWKS_URL = os.getenv("AUTH_JWKS_URL", "")
+AUTH_ROLE_CLAIM = os.getenv("AUTH_ROLE_CLAIM", "pis_roles")  # list claim; "pis_operator" grants operator
+MAX_BODY_BYTES = 64 * 1024
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
-MIN_ADMIN_KEY_LEN = 16
 # Values copied from .env.example / docs; never acceptable outside local/test.
 _PLACEHOLDERS = ("your-secret", "your_", "changeme", "pis_password", "pis_local_dev", "<password>")
 
@@ -27,9 +31,10 @@ def validate() -> list[str]:
     if not DATABASE_URL:
         errors.append("DATABASE_URL is not set (see .env.example).")
     if is_deployed():
-        if len(ADMIN_KEY) < MIN_ADMIN_KEY_LEN:
-            errors.append(f"ADMIN_KEY must be set and at least {MIN_ADMIN_KEY_LEN} characters in {APP_ENV}.")
-        for name, value in (("ADMIN_KEY", ADMIN_KEY), ("DATABASE_URL", DATABASE_URL or "")):
+        for name, value in (("AUTH_ISSUER", AUTH_ISSUER), ("AUTH_AUDIENCE", AUTH_AUDIENCE), ("AUTH_JWKS_URL", AUTH_JWKS_URL)):
+            if not value:
+                errors.append(f"{name} must be set in {APP_ENV}.")
+        for name, value in (("DATABASE_URL", DATABASE_URL or ""),):
             if any(p in value.lower() for p in _PLACEHOLDERS):
                 errors.append(f"{name} looks like a placeholder/default value; set a real one for {APP_ENV}.")
     return errors

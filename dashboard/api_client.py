@@ -4,17 +4,19 @@ import requests
 from typing import Optional
 
 API_BASE = os.getenv("API_URL", "http://localhost:8000")
+# Legacy demo endpoints are operator-only: supply an operator access token from the IdP (never baked into the image).
+HEADERS  = {"Authorization": f"Bearer {os.environ['PIS_API_TOKEN']}"} if os.getenv("PIS_API_TOKEN") else {}
 TIMEOUT  = 60  # seconds — pipeline with real API calls can take a while
 
 
 def _get(path: str, params: dict = None) -> dict | list:
-    resp = requests.get(f"{API_BASE}{path}", params=params, timeout=TIMEOUT)
+    resp = requests.get(f"{API_BASE}{path}", params=params, headers=HEADERS, timeout=TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
 
 def _post(path: str, json: dict = None, params: dict = None) -> dict | list:
-    resp = requests.post(f"{API_BASE}{path}", json=json, params=params, timeout=TIMEOUT)
+    resp = requests.post(f"{API_BASE}{path}", json=json, params=params, headers=HEADERS, timeout=TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 

@@ -1,5 +1,6 @@
 from app.logger import logger
-from fastapi        import APIRouter, HTTPException, Query
+from fastapi        import APIRouter, Depends, HTTPException, Query
+from app.auth       import require_operator, expensive
 from datetime       import date, timedelta
 import random
 from app.schemas         import IngestResponse
@@ -9,7 +10,7 @@ from ingest.github       import ingest_github_activity
 from ingest.github_api   import fetch_github_data
 from ingest.leetcode_api import fetch_leetcode_data
 
-router = APIRouter(prefix="/ingest", tags=["Ingestion"])
+router = APIRouter(prefix="/ingest", tags=["Ingestion"], dependencies=[Depends(require_operator), Depends(expensive)])
 
 @router.post("/coding/real/{student_id}", response_model=IngestResponse)
 def ingest_coding_real(

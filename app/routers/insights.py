@@ -1,11 +1,12 @@
 import os
-from fastapi         import APIRouter, HTTPException, Query
+from fastapi         import APIRouter, Depends, HTTPException, Query
+from app.auth        import require_operator
 from app.logger import logger
 from app.schemas     import InsightResponse, RankingItem
 from ingest.db_connection import get_connection
 from insights.engine import InsightEngine
 
-router = APIRouter(tags=["Insights"])
+router = APIRouter(tags=["Insights"], dependencies=[Depends(require_operator)])
 
 _IMPORTANCES_PATH = "models/feature_importances.json"
 _engine: InsightEngine | None = None

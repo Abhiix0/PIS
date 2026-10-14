@@ -10,7 +10,7 @@ import config
 from ingest.db_connection import get_connection, close_pool
 from ingest.migrate import pending
 from app.logger import logger
-from app.routers import students, ingest, predictions, insights, features, pipeline, admin
+from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles
 
 REQUIRED_MODEL_FILES = [
     Path("models/regressor.pkl"),
@@ -66,8 +66,8 @@ async def lifespan(app: FastAPI):
             f"See logs above for details."
         )
 
-    if len(config.ADMIN_KEY) < config.MIN_ADMIN_KEY_LEN:
-        print("[STARTUP WARNING] ADMIN_KEY not set or too short. /admin endpoints are disabled.")
+    if not (config.AUTH_ISSUER and config.AUTH_AUDIENCE and config.AUTH_JWKS_URL):
+        print("[STARTUP WARNING] AUTH_* not configured. Every protected endpoint will return 401.")
 
     print(f"PIS API started successfully")
     print(f"  Database: connected")
@@ -99,6 +99,7 @@ app.include_router(insights.router)
 app.include_router(features.router, prefix="/features", tags=["features"])
 app.include_router(pipeline.router)
 app.include_router(admin.router)
+app.include_router(profiles.router)
 
 
 # ── Global exception handler — never leak raw tracebacks ─────────────
@@ -158,6 +159,14 @@ def health_detailed():
 
 # ── Request logging middleware ────────────────────────────────────────
 import time
+
+@app.middleware("http")
+async def limit_body(request: Request, call_next):
+    # shortcut: trusts Content-Length; chunked uploads need a streaming cap (or a reverse-proxy limit) before public exposure.
+    if int(request.headers.get("content-length") or 0) > config.MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    return await call_next(request)
+
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

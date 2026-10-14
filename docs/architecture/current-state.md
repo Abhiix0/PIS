@@ -25,7 +25,7 @@ Main path, `POST /pipeline/{id}[?force_refresh=true]`:
 4. `ml.predict.predict` loads the scaler, clips to [0,1], runs both models, upserts `predictions`, and appends `prediction_history` at most once per hour.
 5. `InsightEngine.format_insight` reads features/prediction, applies `insights/rules.py` thresholds on raw values, ranks weaknesses by regressor importance, adds composite patterns and score velocity.
 
-Other routes: `POST /pipeline/batch`, `POST /predict/{id}`, `GET /prediction/{id}`, `GET /insights/{id}`, `GET /ranking`, `GET /features/{id}`, `/students` CRUD-ish (POST, GET, PATCH, `/status`, `/history`), `/ingest/*`, `/admin/retrain`, `/admin/retrain/status`, `/health`, `/health/detailed`. No authentication on anything except `/admin` (header key). Verified.
+Other routes: `POST /pipeline/batch`, `POST /predict/{id}`, `GET /prediction/{id}`, `GET /insights/{id}`, `GET /ranking`, `GET /features/{id}`, `/students` CRUD-ish (POST, GET, PATCH, `/status`, `/history`), `/ingest/*`, `/admin/retrain`, `/admin/retrain/status`, `/health`, `/health/detailed`. Since Phase 5 all of these require an IdP bearer token and are operator-only (`docs/phase5/auth-architecture.md`); new `/me`, `/auth/logout`, `/profiles` are user-scoped.
 
 ## 4. Ingestion semantics
 

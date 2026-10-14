@@ -2,7 +2,10 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
-client = TestClient(app)
+from tests.conftest import make_token
+
+# Legacy /students, /pipeline, ... routes are operator-only since Phase 5.
+client = TestClient(app, headers={"Authorization": "Bearer " + make_token("ops", roles=["pis_operator"])})
 
 
 def test_pipeline_nonexistent_student_returns_404():

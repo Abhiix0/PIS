@@ -33,7 +33,7 @@ Placement Intelligence System (PIS) scores student **placement-readiness** from 
 Verified by inspecting files unless marked **(ran)**.
 
 ```bash
-cp .env.example .env            # DATABASE_URL required; GITHUB_TOKEN, ADMIN_KEY (>=16 chars) optional
+cp .env.example .env            # DATABASE_URL required; GITHUB_TOKEN optional; AUTH_ISSUER/AUTH_AUDIENCE/AUTH_JWKS_URL required in staging/production
 make up                         # docker-compose up --build (API :8000/docs, dashboard :8501)
 make down | make down-clean     # stop | stop and wipe DB volume
 make test                       # pytest inside api container (docker-compose exec)
@@ -65,6 +65,6 @@ pytest tests/test_core.py tests/test_insights.py tests/test_github_api.py tests/
 - **Synthetic data**: random generators exist in `ingest/coding.py`, `ingest/github.py`, and fall back silently in `services/pipeline.py` and `app/routers/ingest.py`. Never add new hidden fallbacks; synthetic data belongs only in labelled demo/test paths. Do not describe synthetic-derived results as the user's real activity.
 - **Provenance**: `fetch_leetcode_data` builds per-problem rows from **aggregate** counts with invented dates (70% last-30-days cycle, 30% random 90 days). Never invent exact historical timestamps from aggregates; GitHub `commit_date` is `pushed_at` of the repo, not a commit date. Record the source of every datum.
 - **ML claims**: labels are a weighted formula of the same features plus fixed-seed Gaussian noise (σ=5). The models learn that formula, not placement outcomes, on ~8 seed students. Never claim they predict hiring/placement; call the output a readiness *proxy score*. Any ML change needs documented baseline, experiment, and evaluation; promote models only after validation and smoke test with a rollback path.
-- **Security**: there is no user authentication; student endpoints are open. Never expose one user's records via an identifier alone in new work. Admin endpoints compare `X-Admin-Key` to `ADMIN_KEY` in constant time and return 503 while the key is unset/short; staging/production refuse to start without a real key.
+- **Security**: `app/auth.py` verifies IdP-issued RS256 JWTs (see `docs/phase5/auth-architecture.md`); every route except `/health*` requires a token. Legacy `students`-keyed routes and `/admin/*` are operator-only (role claim `pis_operator`); user data lives in `profiles`, scoped by `user_id` in the SQL itself. Never expose one user's records via an identifier alone. Real-user ingestion stays disabled until Phase 6. staging/production refuse to start without AUTH_* settings.
 - **Secrets**: never commit `.env`, tokens, or admin keys; never print them; never embed server secrets in any client bundle. The `Dockerfile` does `COPY . .` and there is no `.dockerignore`, so a local `.env` is copied into the image — do not push such images.
 - Do not add an LLM, vector DB, queue, Redis, Kubernetes, microservices, or new model family without a written requirement and rationale.

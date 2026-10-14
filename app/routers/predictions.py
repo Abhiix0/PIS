@@ -1,13 +1,14 @@
 from app.logger import logger
-from fastapi      import APIRouter, HTTPException
+from fastapi      import APIRouter, Depends, HTTPException
+from app.auth     import require_operator, expensive
 from app.schemas  import PredictionResponse
 from ingest.db_connection import get_connection
 from ml.predict   import predict
 from features.compute import run_feature_sql
 
-router = APIRouter(tags=["Predictions"])
+router = APIRouter(tags=["Predictions"], dependencies=[Depends(require_operator)])
 
-@router.post("/predict/{student_id}", response_model=PredictionResponse)
+@router.post("/predict/{student_id}", response_model=PredictionResponse, dependencies=[Depends(expensive)])
 def run_prediction(student_id: int):
     with get_connection() as conn:
         with conn.cursor() as cur:

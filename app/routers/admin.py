@@ -1,15 +1,14 @@
-import hmac
 import json
 import shutil
 import threading
 from pathlib  import Path
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
 
-import config
+from app.auth import require_operator, expensive
 
-router = APIRouter(prefix="/admin", tags=["Admin"])
+router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_operator), Depends(expensive)])
 
 _LIVE_DIR    = Path("models")
 _STAGING_DIR = Path("models/staging")
@@ -97,24 +96,14 @@ def _run_retrain():
             pass
 
 
-def _require_admin(provided: str) -> None:
-    """403 on a wrong key; 503 (endpoint disabled) when no usable ADMIN_KEY is configured."""
-    if len(config.ADMIN_KEY) < config.MIN_ADMIN_KEY_LEN:
-        raise HTTPException(status_code=503, detail="Admin endpoints disabled: ADMIN_KEY not configured")
-    if not hmac.compare_digest(provided.encode(), config.ADMIN_KEY.encode()):
-        raise HTTPException(status_code=403, detail="Invalid admin key")
-
-
 @router.post("/retrain", status_code=202)
-def trigger_retrain(x_admin_key: str = Header(...)):
+def trigger_retrain():
     """Trigger a background model retrain.
 
     - Non-blocking: returns 202 immediately
     - Safe: writes to models/staging/, validates, then atomically swaps
     - Idempotent: returns 409 if a retrain is already running
     """
-    _require_admin(x_admin_key)
-
     if not _retrain_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Retrain already in progress")
 
@@ -126,7 +115,6 @@ def trigger_retrain(x_admin_key: str = Header(...)):
 
 
 @router.get("/retrain/status")
-def retrain_status(x_admin_key: str = Header(...)):
+def retrain_status():
     """Poll retrain progress. States: idle | running | completed | failed."""
-    _require_admin(x_admin_key)
     return _retrain_status

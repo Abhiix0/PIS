@@ -1,8 +1,9 @@
-from fastapi     import APIRouter, HTTPException
+from fastapi     import APIRouter, Depends, HTTPException
+from app.auth    import require_operator
 from app.schemas import StudentCreate, StudentResponse, StudentListItem, StudentStatus, PredictionHistoryItem, StudentUpdate
 from ingest.db_connection import get_connection
 
-router = APIRouter(prefix="/students", tags=["Students"])
+router = APIRouter(prefix="/students", tags=["Students"], dependencies=[Depends(require_operator)])
 
 @router.post("", response_model=StudentResponse, status_code=201)
 def create_student(body: StudentCreate):

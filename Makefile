@@ -34,7 +34,7 @@ seed:
 
 pipeline-all:
 	curl -s -X POST http://localhost:8000/pipeline/batch \
-		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer $(PIS_API_TOKEN)" -H "Content-Type: application/json" \
 		-d '{"student_ids":[1,2,3,4,5,6,7,8]}' | python -m json.tool
 
 health:

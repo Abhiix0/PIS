@@ -23,7 +23,10 @@ services:
       APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: postgresql://pis_user:${POSTGRES_PASSWORD:-pis_local_dev}@db:5432/pis_db
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      ADMIN_KEY: ${ADMIN_KEY:-}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
+      AUTH_JWKS_URL: ${AUTH_JWKS_URL:-}
+      AUTH_ROLE_CLAIM: ${AUTH_ROLE_CLAIM:-pis_roles}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}  # compose is the local-dev path; refused if APP_ENV is staging/production
     depends_on:
       db:
@@ -40,6 +43,7 @@ services:
       - "8501:8501"
     environment:
       API_URL: http://api:8000
+      PIS_API_TOKEN: ${PIS_API_TOKEN:-}
     depends_on:
       - api
     restart: on-failure
