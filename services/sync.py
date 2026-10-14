@@ -11,6 +11,7 @@ from ingest.db_connection import get_connection
 from ingest.provider import ProviderError
 from ingest.validators import validate_observation
 from services import privacy
+from app.logger import logger
 
 INGESTION_VERSION = "ingest-v1"
 _STALE_RUN_MINUTES = 15  # a 'running' row older than this is a dead worker, not a live sync
@@ -124,6 +125,8 @@ def _finish(run_id: str, cid: str, status: str, code=None, observed=None, create
         cur.execute("UPDATE integration_connections SET status = %s, "
                     "last_success_at = CASE WHEN %s THEN now() ELSE last_success_at END WHERE id = %s",
                     ("connected" if ok else "error", ok, cid))
+    # alarm source: a metric filter on sync_status=failed drives the repeated-failure alert
+    logger.info("sync_finished", extra={"run_id": str(run_id), "sync_status": status, "error_code": code})
 
 
 def _store(run_id: str, pid: str, provider: str, observations) -> tuple[int, int]:

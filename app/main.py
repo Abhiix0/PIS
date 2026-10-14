@@ -148,6 +148,25 @@ def health():
     return {"status": "ok", "version": "1.0.0"}
 
 
+@app.get("/health/ready", tags=["System"])
+def health_ready():
+    """Readiness probe (load balancer): 503 unless the DB answers, migrations are applied and a model is active."""
+    problems = []
+    try:
+        with get_connection() as conn:
+            if pending(conn):
+                problems.append("migrations")
+    except Exception:
+        problems.append("database")
+    try:
+        active_version()
+    except Exception:
+        problems.append("model")
+    if problems:
+        return JSONResponse(status_code=503, content={"status": "unready", "problems": problems})
+    return {"status": "ready"}
+
+
 @app.get("/health/detailed", tags=["System"])
 def health_detailed():
     """Detailed health check showing system component status."""
@@ -215,6 +234,8 @@ async def log_requests(request: Request, call_next):
     logger.info(
         f"[{request_id}] {request.method:<6} {request.url.path:<35} "
         f"student={student_id:<4} status={response.status_code} "
-        f"duration={duration:.1f}ms"
+        f"duration={duration:.1f}ms",
+        extra={"request_id": request_id, "method": request.method, "path": request.url.path,
+               "status": response.status_code, "duration_ms": round(duration, 1)},
     )
     return response

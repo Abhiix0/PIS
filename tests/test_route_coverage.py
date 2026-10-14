@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
-PUBLIC = {"/health", "/health/detailed", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+PUBLIC = {"/health", "/health/detailed", "/health/ready", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
 ROUTES = [(m, r.path) for r in app.routes if isinstance(r, APIRoute) for m in r.methods if r.path not in PUBLIC]
 client = TestClient(app)
 
