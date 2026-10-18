@@ -58,7 +58,7 @@ def test_invalid_observations_raise_with_a_rule_code(kw, rule):
 
 
 def test_every_scaled_feature_is_in_the_data_dictionary():
-    doc = (ROOT / "docs" / "data-dictionary" / "features.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs" / "data" / "data-dictionary.md").read_text(encoding="utf-8")
     assert FEATURE_SCHEMA_VERSION in doc
     for col in SCALE_COLS:
         assert f"| `{col}` |" in doc, col

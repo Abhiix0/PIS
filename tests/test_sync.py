@@ -335,14 +335,19 @@ def test_anonymous_is_rejected():
     assert client.get(f"{V1}/sync-runs?provider=github").status_code == 401
 
 
-def test_unexpected_adapter_crash_still_closes_the_run(user):
+def test_unexpected_adapter_crash_still_closes_the_run(user, caplog):
+    # whether TestClient re-raises the background-task error depends on the middleware stack, so the run row and log are the contract
+    caplog.set_level("INFO", logger="pis")
     with patch("ingest.github_api.fetch_github_observations", side_effect=KeyError("boom")):
-        with pytest.raises(KeyError):
+        try:
             user.sync()
-    assert (
-        user.runs()[0]["status"] == "failed"
-        and user.runs()[0]["safe_error_code"] == "internal_error"
-    )
+        except KeyError:
+            pass
+    run = user.runs()[0]
+    assert run["status"] == "failed"
+    assert run["safe_error_code"] == "internal_error"
+    assert run["completed_at"] is not None
+    assert any(r.message == "sync_finished" and r.sync_status == "failed" for r in caplog.records)
 
 
 # ── data-model invariants (provenance is enforced by the schema, not by convention) ──
