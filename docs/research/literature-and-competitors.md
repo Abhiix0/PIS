@@ -1,4 +1,4 @@
-# Phase 2 — Literature and Competitor Scan (narrow)
+# Literature and Competitor Scan (narrow)
 
 Access date for every entry: **2026-10-13**. Method: a handful of web searches plus page fetches. This is not a systematic review. Anything not opened and read is marked **unverified**. Dates are given only where a page stated them.
 

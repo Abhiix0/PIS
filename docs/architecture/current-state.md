@@ -1,86 +1,88 @@
-# PIS Current State (Phase 0)
+# PIS current state
 
-Snapshot of the repo at `main` (commit `82b072d`), from reading the source. **Verified** = read in code. **Ran** = executed. **Unverified** = inferred or not executed. Only the four mock-based test files were run (23 passed); the stack was never started and no DB-backed test was run.
+Description of the repository on branch `revamp`, written from the source. **Verified** = read in code. **Unverified** = inferred, or depends on running the stack, which this document did not do. Route list: `api-surface.md`. Limits and open decisions are at the end.
 
 ## 1. Topology
 
-`docker-compose.yml`: `db` (postgres:15-alpine), `api` (built from `Dockerfile`, runs `entrypoint.sh`), `dashboard` (Streamlit, `API_URL=http://api:8000`). The `api` container mounts `./models` and `./features` from the host. Verified.
+- `docker-compose.yml`: `db` (postgres:15-alpine, healthcheck) and `api` (built from `Dockerfile`, runs `entrypoint.sh`, mounts `./models` and `./features`). There is no dashboard service. Verified.
+- Desktop client: `apps/desktop/` (Tauri 2 + React + TypeScript), an HTTP client of `/api/v1`. See `../design/desktop.md`.
+- Infra for a hosted deployment: `deploy/aws/` (`main.tf`, `release.sh`), `../architecture/decisions/0004-aws-hosting.md`, `../ops/runbook.md`. Never applied to a real account (unverified).
+- CI: `.github/workflows/{backend,desktop,release}.yml` exist; their run results are not known here (unverified).
 
-## 2. Database initialization
+## 2. Configuration (`config.py`)
 
-- **Updated in Phase 3.** The `db` container no longer runs init scripts. `entrypoint.sh` runs `python -m ingest.migrate` (plus `--seed` when `SEED_DEMO_DATA=true`, compose default, refused when `APP_ENV` is staging/production) before features/training. The API also refuses to start if migrations are pending.
-- Tables: `students`, `coding_activity` (unique `(student_id, problem_id)`), `github_activity`, `features`, `predictions`, `prediction_history`. Migrations: 000 baseline, 001 github unique, 001 usernames, 002 sync timestamps, 003 history (`sql/migrations/`, tracked in `schema_migrations`).
-- Resolved in Phase 3: `uq_github_activity` is applied by migration `001_add_github_unique.sql` (dedupes first); the non-immutable partial index was replaced by `idx_coding_student_date`. See `docs/phase3/stabilization-report.md`.
-- Seed: 8 hand-written students (`aryan@pis.dev` etc.) with fixed-date activity rows. Verified.
-- `features` has no `cgpa` column; CGPA is joined from `students` at load/predict time.
+`APP_ENV` is `local|test|staging|production`. `validate()` returns errors; in staging/production it additionally requires `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_JWKS_URL` and rejects placeholder DB passwords. `seed_allowed()` is false when deployed. `LEETCODE_INTEGRATION_ENABLED` defaults to false. `SYNC_COOLDOWN_SECONDS` defaults to 300. Request bodies are capped at 64 KiB. Verified.
 
-## 3. Request flow
+## 3. Database and migrations
 
-`app/main.py` registers routers: students, ingest, predictions, insights, features (`/features`), pipeline, admin. The lifespan hook raises if `DATABASE_URL` is missing, the DB is unreachable, or any of `models/{regressor,classifier,scaler}.pkl` / `feature_importances.json` is missing; a short `ADMIN_KEY` only logs a warning. A global handler returns `Internal server error: <ExceptionType>`. A middleware logs method/path/status/duration.
+`python -m ingest.migrate [--seed]` applies `sql/migrations/*.sql` in filename order and records each in `schema_migrations`. The API refuses to start while migrations are pending. Verified (`app/main.py` lifespan, `ingest/migrate.py`).
 
-Main path, `POST /pipeline/{id}[?force_refresh=true]`:
-1. Router checks the student exists, then returns **429** if `features.computed_at` is under 5 minutes old (unless forced).
-2. `services/pipeline.run` reads usernames and sync timestamps, then runs five steps, recording per-step timing. Ingestion errors are recorded as step errors and do **not** abort the run. Feature, predict, and insight errors raise (HTTP 500/422).
-3. `features.compute.run_feature_sql_for_student` upserts one `features` row from `feature_engineering_single.sql`.
-4. `ml.predict.predict` loads the scaler, clips to [0,1], runs both models, upserts `predictions`, and appends `prediction_history` at most once per hour.
-5. `InsightEngine.format_insight` reads features/prediction, applies `insights/rules.py` thresholds on raw values, ranks weaknesses by regressor importance, adds composite patterns and score velocity.
-
-Other routes: `POST /pipeline/batch`, `POST /predict/{id}`, `GET /prediction/{id}`, `GET /insights/{id}`, `GET /ranking`, `GET /features/{id}`, `/students` CRUD-ish (POST, GET, PATCH, `/status`, `/history`), `/ingest/*`, `/admin/retrain`, `/admin/retrain/status`, `/health`, `/health/detailed`. Since Phase 5 all of these require an IdP bearer token and are operator-only (`docs/phase5/auth-architecture.md`); new `/me`, `/auth/logout`, `/profiles` are user-scoped.
-
-## 4. Ingestion semantics
-
-- **Synthetic coding**: `STUDENT_PROFILES` covers student IDs 1-8 only. `generate_coding_records` uses unseeded `random` (dates within the last 180 days), so output differs per run. For an ID outside 1-8 without a LeetCode username, `ingest_coding_activity` raises `ValueError` (pipeline records a failed step), while `app/routers/ingest.py` instead generates 30 random rows. Verified.
-- **LeetCode** (`leetcode_api.py`): one GraphQL call for `submitStats` totals per difficulty. It then **fabricates** one row per solved problem: 70% dated by cycling the last 30 days, 30% random within 90 days. Real per-problem dates are not available. Row `problem_id`s are synthetic (`<user8>_<difficulty>_r/s####`). The pipeline deletes all existing `coding_activity` for the student before inserting. Data source label: `real_leetcode_stats`.
-- **GitHub** (`github_api.py`): up to 10 most recently updated repos; per repo the **total** commit count (Link-header trick) and `commit_date = pushed_at` date. Per-repo count failures fall back to `1` silently. Unauthenticated limit 60/hr; `GITHUB_TOKEN` optional. Rows are inserted with `ON CONFLICT DO NOTHING`, so a repo with new commits on a new `pushed_at` date adds a second row with a cumulative count (likely double counting; unverified).
-- **Fallback**: if a real API call fails, the pipeline silently uses synthetic data (only for IDs 1-8 or else nothing) and reports `data_source: "synthetic"` in the step, but the student-facing score is computed regardless.
-- **Freshness**: real-API calls are skipped for 24h after `*_last_synced` unless forced; step reports `cached`.
-- `validators.py` checks coding/GitHub records in Python before insert (coding path only in pipeline).
-
-## 5. Feature computation
-
-Five features: `total_problems` (count), `avg_difficulty` (easy=1, medium=2, hard=3 mean), `consistency_score` (distinct active ISO weeks in the last 90 days / 13, capped at 1), `commit_frequency` (sum of commits / days since earliest `commit_date`), `cgpa` (from `students`). Two SQL variants must be kept in sync (not compared here). `python -m features.compute` runs the full SQL, loads, fits a `MinMaxScaler` on all rows, saves `models/scaler.pkl`, and writes `features/features_{raw,scaled}.csv`. The scaler is fit on the current population (8 seed students at boot), so a student's scaled values depend on who else is in the DB. Consistency is derived from fabricated LeetCode dates (see §4).
-
-## 6. Model training and inference
-
-- `ml/labels.py`: label = weighted sum of **the same scaled features** (weights cgpa 20, problems 15, difficulty 20, consistency 25, commits 20) + Gaussian noise (σ=5, seed 42), clipped; category thresholds ≥65 Ready, ≥40 Near Ready, else Needs Improvement.
-- `ml/train.py`: reads `features/features_scaled.csv`, trains RandomForest regressor and classifier (`n_estimators=100`, 75/25 split, 3-fold CV, dummy baselines), exports `models/{regressor,classifier}.pkl` and `feature_importances.json`.
-- The README's "R² ≈ 0.90" claim measures recovery of a synthetic formula, not placement outcomes; with 8 rows the 25% test split is 2 samples (unverified, not run).
-- `ml/predict.py` loads models at **import time**, so retraining via `/admin/retrain` swaps files on disk but the running API keeps old in-memory models until restart (unverified; inferred from module-level `joblib.load`).
-- `/admin/retrain`: recompute features, overwrite `models/scaler.pkl` in place (before validation), train into `models/staging/`, smoke-test, then move files into `models/`. State is in-process memory, single-lock; no artifact version or rollback record.
-- Model `.pkl` files are committed to git despite a `.gitignore` entry (the entry has an inline comment so it may not match; unverified).
-
-## 7. Dashboard
-
-`dashboard/app.py` (793 lines, Streamlit) calls the API only via `dashboard/api_client.py` (`requests`, 60s timeout, `API_URL` env). Covers student list/status, pipeline trigger, prediction/insights/features, ranking, history, student create/update. It exposes data-source labels per pipeline step; the UI copy says blank usernames mean "synthetic". Verified by grep, UI not run.
-
-## 8. Tests
-
-| File | Boundary |
+| Migration | Adds |
 |---|---|
-| `test_core.py`, `test_insights.py` | Pure logic and rules (some patch app startup) |
-| `test_github_api.py`, `test_leetcode_api.py` | Mocked HTTP |
-| `test_api.py`, `test_pipeline.py` | Real Postgres seeded with `seed.sql` and trained models (not run) |
+| 000_baseline | `students`, `coding_activity`, `github_activity`, `features`, `predictions`, indexes |
+| 001_add_github_unique | unique `github_activity` key (dedupes first) |
+| 001_add_usernames | `students.github_username`, `leetcode_username` (duplicate prefix is allowed once; see `sql/migrations/README.md`) |
+| 002_add_sync_timestamps | `*_last_synced` on `students` |
+| 003_add_prediction_history | `prediction_history` |
+| 004_users_profiles | `users`, `profiles`, enum `data_origin` |
+| 005_ingestion_provenance | enums `provenance`, `value_state`; `provenance` column on legacy activity tables; `integration_connections`, `sync_runs`, `source_observations`, `data_quality_results` |
+| 006_model_versions | `model_versions` (one `active` row, partial unique index); assessment columns on `predictions`/`prediction_history`; history immutability trigger |
+| 007_assessments_data_requests | `assessments` (immutable by trigger), `data_requests` |
+| 008_privacy_audit | `audit_events` (immutable by trigger), `users.research_consent_at` |
 
-Ran with `venv/Scripts/python.exe -m pytest` on the four mock-based files: **23 passed**. With the system Python, 2 fail on missing `psycopg2`. **Untested**: admin retrain, SQL/feature parity between the two variants, training, migrations on a clean DB, ingest routers, dashboard, cooldown/cache logic, auth (none exists).
+The legacy `students`-keyed tables (000-003) still exist. They hold only demo data from `sql/seed.sql` (8 students, `provenance = synthetic`) and feed the feature/training path. Real users live in `users`/`profiles`. Verified.
 
-## 9. Known limitations
+## 4. Authentication and authorization (`app/auth.py`)
 
-- Labels are constructed, not outcomes; scores are a readiness *proxy* only.
-- Fabricated LeetCode timestamps; GitHub dates are `pushed_at`; aggregate counts drive features.
-- Silent synthetic fallback and unseeded synthetic generators.
-- No auth or per-user data isolation; open student endpoints; admin key unset is only a warning (and an empty `X-Admin-Key` would match an unset `ADMIN_KEY`; unverified).
-- `.env` copied into the Docker image (no `.dockerignore`); `docker-compose.yml` hardcodes DB credentials and does not pass `ADMIN_KEY`.
-- No migration tooling; schema/migration drift (§2). `sqlalchemy` is in `requirements.txt` but unused by the code reviewed (not grepped exhaustively). `datetime.utcnow()` is used in places.
-- No `models/` versioning; unpinned reproducibility of CSV artifacts committed under `features/`.
-- Unknown: whether `make up` boots cleanly end to end today; LeetCode GraphQL stability and terms; actual test results for DB-backed tests.
+- The API only verifies tokens: RS256 JWT, signature via JWKS (`AUTH_JWKS_URL`), `iss`, `aud`, `exp`, `iat`, `sub` required. If any `AUTH_*` value is unset every protected route returns 401.
+- A valid token get-or-creates a `users` row; non-`active` users get 403; tokens issued before `sessions_valid_after` are rejected (logout / deletion revoke sessions).
+- Operator = role `pis_operator` inside the claim named by `AUTH_ROLE_CLAIM` (default `pis_roles`).
+- Rate limits are in-process per worker (`rate_limit`, `expensive` = 10/min); failed auth is limited per client IP. Not shared across replicas.
+- Every route except `/health*` needs a token. User queries filter by the token's `user_id` in SQL. Verified. Design: `../security/auth-architecture.md`.
 
-## 10. Open decisions (from PRD §19; none resolved here)
+## 5. Real-user data flow
 
-1. Assessment target: real placement outcome vs. preparation assessment until valid outcome data exists.
-2. Identity/authentication mechanism and per-user data isolation.
-3. GitHub access: public-only vs. delegated authorization.
-4. LeetCode source: is the current GraphQL interface permitted/stable, and can it provide per-problem dates?
-5. Which academic data (CGPA) is necessary vs. optional.
-6. Cloud provider, background jobs, model artifact storage, desktop updater.
-7. Handling of the synthetic fallback and demo data: remove, or isolate behind an explicit demo mode.
-8. ~~Migration strategy~~ — decided in Phase 3: ordered SQL runner (see report).
+1. `PUT /api/v1/integrations/{provider}` stores a public username (owner-scoped, `services/sync.py::connect`). LeetCode is refused unless `LEETCODE_INTEGRATION_ENABLED`.
+2. `POST /api/v1/integrations/{provider}/sync` creates a `sync_runs` row before calling the provider, returns 202, then `execute_run` runs in the background. Per-connection cooldown counts failed attempts; one running sync per connection (unique index); runs older than 15 minutes count as dead.
+3. `ingest/github_api.py` and `ingest/leetcode_api.py` return typed `Observation`s or raise `ProviderError`; `validate_observation` runs before storage. Results are appended to `source_observations` with `provenance`, `granularity`, `event_at_precision`, `sync_run_id`. A failed sync never writes synthetic data and never replaces earlier observations.
+4. `GET /api/v1/me/data-quality`, `/sync-runs` expose run state.
+5. `POST /api/v1/assessments` snapshots current evidence and always stores `assessment_type = insufficient_evidence` with no score (`app/routers/v1.py::create_assessment`). Real-user observations do **not** feed `features`, `predictions` or the model. Verified.
+
+Provenance rules: `../data/provenance.md`. Privacy export/deletion/audit: `services/privacy.py`, `../data/privacy-and-retention.md`.
+
+## 6. Features, training, model bundles
+
+- `sql/feature_engineering.sql` computes five features for the legacy tables; `python -m features.compute` loads them, MinMax-scales, writes `models/scaler.pkl` and `features/*.csv`. Definitions: `../data/data-dictionary.md`.
+- `ml/labels.py`: label = weighted sum of the same scaled features plus fixed-seed Gaussian noise (σ=5); categories by score threshold. `ml/train.py` trains a RandomForest regressor and classifier into a staging directory. The model learns this constructed formula, not placement outcomes, from ~8 seed rows. Verified in code.
+- `ml/bundle.py`: immutable bundles `models/bundles/<version>/` with a manifest of file checksums, feature order and schema version; registry in `model_versions`; lifecycle candidate -> approved -> active -> retired, one active at a time, rollback to the last retired. Startup loads the active bundle and refuses checksum or schema mismatch; with none active the API does not start. Details: `../ml/model-lifecycle.md`.
+- `ml/predict.py` is the batch scorer over the legacy `students`/`features` tables, used at local boot.
+- `ml/experiment.py` (`python -m ml.experiment`) is the baseline runner; see `../ml/experiment-protocol.md`, `../ml/baseline-report.md`.
+- The former `insights/` rule engine and Streamlit `dashboard/` are not in git (only untracked `__pycache__` remains locally). `../ml/model-lifecycle.md` still names `insights/`; treat that sentence as stale.
+
+## 7. Boot paths
+
+- Local/compose (`entrypoint.sh`): migrate (+ `--seed` when `SEED_DEMO_DATA=true`) -> `features.compute` -> `ml.train` -> `ml.bundle bootstrap` (activates the newest candidate as `local-bootstrap` only if none is active) -> `ml.predict` -> uvicorn.
+- staging/production: uvicorn only. Migrations are a separate release step; models ship in the image. Verified in the script; never executed against a deployed environment.
+
+## 8. API
+
+`app/main.py` mounts `routers/admin.py`, `routers/v1.py` (`/api/v1/*`) and `session_router` (`/auth/logout`), plus `/health`, `/health/ready`, `/health/detailed`. All errors use `{error:{code,message,request_id}}`. Route table: `api-surface.md`; narrative: `api-v1.md`. A test (`tests/test_route_coverage.py`) compares the table with `app.routes`.
+
+## 9. Tests
+
+`tests/` is pytest. DB-free: `test_core`, `test_github_api`, `test_leetcode_api`, `test_config`, `test_ingestion_contracts`, `test_experiment`, `test_bundle` (mixed), `test_route_coverage`. DB-backed: `test_api_v1`, `test_sync`, `test_auth`, `test_ops`, `test_migrate` (needs `TEST_ADMIN_DATABASE_URL`). Results of the last run are recorded in the pull request or CI, not here.
+
+## 10. Known limitations
+
+- Scores are a readiness *proxy* from a constructed formula; no placement-outcome labels exist.
+- No real-user score is produced yet (see §5.5).
+- GitHub `commit_date`/`event_at` is the repo's `pushed_at`; LeetCode is aggregate-only.
+- Legacy `students` tables, the scaler fit on all rows, and the feature SQL are still demo-scale (8 rows).
+- Rate limiting is per process.
+- `sqlalchemy` is listed in `requirements.txt` but the code uses `psycopg2` only (grep not exhaustive, unverified).
+- The `Dockerfile` has `COPY . .`; `.dockerignore` excludes `.env`, `venv/` and `.env.*` (read, image not built).
+- Stack boot (`make up`) end to end, the AWS deployment, signed installers and clean-machine installs are unverified.
+
+## 11. Open decisions
+
+See PRD §19 in `../product/PIS_PRD.md`: assessment target (outcome vs. preparation), GitHub access scope, LeetCode source and terms, which academic data is required, research consent, release channel.

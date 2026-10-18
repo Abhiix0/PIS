@@ -11,7 +11,7 @@ SQL_PATH = _ROOT / "sql" / "feature_engineering.sql"
 FEATURES_CSV = _ROOT / "features" / "features_scaled.csv"
 RAW_CSV = _ROOT / "features" / "features_raw.csv"
 
-# Bump on any change to a feature's SQL, units or scaling, and update docs/data-dictionary/features.md.
+# Bump on any change to a feature's SQL, units or scaling, and update docs/data/data-dictionary.md.
 FEATURE_SCHEMA_VERSION = "features-v1"
 
 # Columns that will be scaled — cgpa included because ML needs it normalized

@@ -14,7 +14,7 @@ terraform {
 }
 
 variable "env" { type = string } # staging | production
-variable "region" { type = string } # data residency: see docs/adr/0004-aws-hosting.md
+variable "region" { type = string } # data residency: see docs/architecture/decisions/0004-aws-hosting.md
 variable "vpc_id" { type = string }
 variable "private_subnets" { type = list(string) }
 variable "public_subnets" { type = list(string) }

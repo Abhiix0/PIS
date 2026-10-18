@@ -2,7 +2,7 @@
 # Controlled release: build immutable image -> push -> migrate (one-off task) -> roll the service.
 # Usage: PRIVATE_SUBNET=subnet-.. APP_SG=sg-.. deploy/aws/release.sh <env> <region> <ecr-repo-uri> [image-tag]
 # Rollback: re-run with the previous good tag as 4th arg (skips build; still runs migrate, which is a no-op
-# for already-applied migrations). Migrations are forward-only; see docs/phase15/runbook.md.
+# for already-applied migrations). Migrations are forward-only; see docs/ops/runbook.md.
 set -eu
 ENV=$1; REGION=$2; REPO=$3; TAG=${4:-}
 CL=pis-$ENV

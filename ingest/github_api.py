@@ -1,7 +1,7 @@
 """GitHub adapter: public REST data -> typed observations.
 
 Only public data of a public username is read. Any failure raises ProviderError; nothing here ever
-turns a failed request into a count. See docs/phase6/ingestion.md for what each observation means.
+turns a failed request into a count. See docs/data/provenance.md for what each observation means.
 """
 
 import os

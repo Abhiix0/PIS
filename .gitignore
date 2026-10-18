@@ -18,6 +18,6 @@ models/*.json
 models/staging/
 models/bundles/
 features/*.csv
-# experiments: keep only the baseline report linked from docs/research/baseline-report.md
+# experiments: keep only the baseline report linked from docs/ml/baseline-report.md
 experiments/*
 !experiments/baseline-synthetic-a7d069146a57.json

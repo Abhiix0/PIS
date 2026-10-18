@@ -4,9 +4,10 @@ Guidance for Claude Code in this repository. Verify files and commands against t
 
 ## Documents
 
-- `PIS_PRD.md` — product specification (open decisions in §19).
-- `PIS_PHASED_IMPLEMENTATION_PLAN.md` — engineering sequence and non-negotiable rules. Work one phase at a time; stop at the phase's exit gate.
+- `docs/README.md` — index of all documentation (topical folders: architecture, data, ml, security, ops, research, design, product, history).
 - `docs/architecture/current-state.md` — verified description of today's system, known limitations, open decisions.
+- `docs/product/PIS_PRD.md` — product specification (open decisions in §19). The phased implementation plan was deleted; `docs/history/` is historical.
+- `CONTRIBUTING.md` — branching, `make check`, migration/synthetic-data/ML rules.
 
 ## Product and stack
 
@@ -40,10 +41,11 @@ make test-local                 # pytest tests/ -v --tb=short (needs live DB + m
 make health | make logs
 python -m features.compute && python -m ml.train && python -m ml.bundle bootstrap && python -m ml.predict   # entrypoint.sh boot order (train makes a candidate; activate via ml.bundle), then uvicorn app.main:app
 # No DB/models needed (using venv/Scripts/python.exe -m pytest):
-pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py
+pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_route_coverage.py
+make check                      # lint + mypy + pytest with coverage floor (needs DB, TEST_ADMIN_DATABASE_URL)
 ```
 
-`make up`, `make test`, `make test-local`, and the module commands were **not** run in Phase 0 (no live DB). The system `python` on the dev machine lacks `psycopg2`; use `venv/Scripts/python.exe`.
+ruff, venv mypy and the DB-free pytest files were run on 2026-10-18; `make up`, `make test`, `make test-local`, `make check` and the module commands need Docker/a DB and were not run then. The system `python` on the dev machine lacks `psycopg2`; use `venv/Scripts/python.exe`.
 
 ## Execution flow
 
@@ -61,8 +63,8 @@ Real users: `PUT /api/v1/integrations/{provider}` → `POST .../sync` (202, back
 ## Mandatory safeguards
 
 - **Synthetic data**: the random generators were removed; the only synthetic data is `sql/seed.sql` (local/test), and the `provenance` column on `coding_activity`/`github_activity` defaults to `synthetic`. A failed provider call never falls back to synthetic data. Never add hidden fallbacks; synthetic data belongs only in labelled demo/test paths. Do not describe synthetic-derived results as the user's real activity.
-- **Provenance**: real-user provider data is stored only as `source_observations` (migration 005) with `provenance`, `granularity`, `event_at_precision`, and a `sync_run_id`; LeetCode is aggregate-only (no solve dates, disabled unless `LEETCODE_INTEGRATION_ENABLED`). Never invent exact timestamps from aggregates; GitHub `commit_date`/`event_at` is the repo's `pushed_at` (precision `repo_push`), not a commit date. Record the source of every datum. Feature definitions: `docs/data-dictionary/features.md`.
+- **Provenance**: real-user provider data is stored only as `source_observations` (migration 005) with `provenance`, `granularity`, `event_at_precision`, and a `sync_run_id`; LeetCode is aggregate-only (no solve dates, disabled unless `LEETCODE_INTEGRATION_ENABLED`). Never invent exact timestamps from aggregates; GitHub `commit_date`/`event_at` is the repo's `pushed_at` (precision `repo_push`), not a commit date. Record the source of every datum. Feature definitions: `docs/data/data-dictionary.md`.
 - **ML claims**: labels are a weighted formula of the same features plus fixed-seed Gaussian noise (σ=5). The models learn that formula, not placement outcomes, on ~8 seed students. Never claim they predict hiring/placement; call the output a readiness *proxy score*. Any ML change needs documented baseline, experiment, and evaluation; promote models only after validation and smoke test with a rollback path.
-- **Security**: `app/auth.py` verifies IdP-issued RS256 JWTs (see `docs/phase5/auth-architecture.md`); every route except `/health*` requires a token. `/admin/*` is operator-only (role claim `pis_operator`); user data lives in `profiles`, scoped by `user_id` in the SQL itself. Never expose one user's records via an identifier alone. Real-user ingestion runs only through `/api/v1/integrations/*` (owner-scoped, public usernames, per-connection cooldown; see `docs/phase6/ingestion.md`). staging/production refuse to start without AUTH_* settings.
-- **Secrets**: never commit `.env`, tokens, or admin keys; never print them; never embed server secrets in any client bundle. The `Dockerfile` does `COPY . .` and there is no `.dockerignore`, so a local `.env` is copied into the image — do not push such images.
+- **Security**: `app/auth.py` verifies IdP-issued RS256 JWTs (see `docs/security/auth-architecture.md`); every route except `/health*` requires a token. `/admin/*` is operator-only (role claim `pis_operator`); user data lives in `profiles`, scoped by `user_id` in the SQL itself. Never expose one user's records via an identifier alone. Real-user ingestion runs only through `/api/v1/integrations/*` (owner-scoped, public usernames, per-connection cooldown; see `docs/data/provenance.md`). staging/production refuse to start without AUTH_* settings.
+- **Secrets**: never commit `.env`, tokens, or admin keys; never print them; never embed server secrets in any client bundle. The `Dockerfile` does `COPY . .`; `.dockerignore` excludes `.env`, but do not push images built from a tree with other local secrets.
 - Do not add an LLM, vector DB, queue, Redis, Kubernetes, microservices, or new model family without a written requirement and rationale.

@@ -1,4 +1,4 @@
-# Phase 2 — Data-Source Feasibility Audit
+# Data-Source Feasibility Audit
 
 Access date: 2026-10-13. "Code" = read from `ingest/*_api.py` in this repo. "Doc" = fetched from the cited page. "Unverified" = not confirmed in this phase. No live API calls were made.
 
