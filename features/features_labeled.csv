@@ -1,9 +1,0 @@
-student_id,name,branch,cgpa,total_problems,avg_difficulty,consistency_score,commit_frequency,readiness_score,category
-1,Aryan Mehta,CSE,1.0,1.0,1.0,1.0,0.2799,85.6,Ready
-2,Priya Sharma,CSE,0.8788,0.8467,0.8718,1.0,0.5382,83.48,Ready
-3,Rohan Das,IT,0.6061,0.58,0.7692,1.0,0.0431,62.07,Near Ready
-4,Sneha Iyer,IT,0.4242,0.5133,0.7521,1.0,0.027,56.77,Near Ready
-5,Karan Patel,ECE,0.3333,0.1133,0.3248,0.374,1.0,44.21,Near Ready
-6,Divya Nair,ECE,0.5152,0.1467,0.3504,0.7496,0.6363,50.98,Near Ready
-7,Amit Roy,MECH,0.0,0.0,0.1624,0.1252,0.0139,6.66,Needs Improvement
-8,Fatima Khan,MECH,0.0909,0.02,0.0,0.0,0.0,2.12,Needs Improvement
