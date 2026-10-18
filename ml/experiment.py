@@ -6,6 +6,7 @@ that formula, not any placement outcome. Output is a pipeline smoke test.
 
     python -m ml.experiment [--features features/features_raw.csv] [--out experiments]
 """
+
 import argparse
 import hashlib
 import json
@@ -25,7 +26,7 @@ from sklearn.model_selection import GroupKFold, cross_val_predict
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import MinMaxScaler
 
-from ml.labels import WEIGHTS, _LABEL_NOISE_SEED, _LABEL_NOISE_STD, generate_labels
+from ml.labels import _LABEL_NOISE_SEED, _LABEL_NOISE_STD, WEIGHTS, generate_labels
 from ml.train import FEATURE_COLS
 
 SEED = 42
@@ -35,6 +36,7 @@ TARGET = "readiness_score: weighted formula of min-max scaled features + N(0, 5)
 
 class RuleFormula(BaseEstimator, RegressorMixin):
     """Transparent baseline: the label weights applied to scaled features, no learning."""
+
     def fit(self, X, y=None):
         self.n_features_in_ = np.asarray(X).shape[1]
         return self
@@ -50,7 +52,8 @@ def candidates():
         "rule_formula": make_pipeline(MinMaxScaler(), RuleFormula()),
         "ridge": make_pipeline(MinMaxScaler(), Ridge(alpha=1.0)),
         "random_forest": make_pipeline(
-            MinMaxScaler(), RandomForestRegressor(n_estimators=100, random_state=SEED)),
+            MinMaxScaler(), RandomForestRegressor(n_estimators=100, random_state=SEED)
+        ),
     }
 
 
@@ -97,21 +100,33 @@ def run(features_path: Path) -> dict:
     body = {
         "synthetic": True,
         "claim": "Pipeline smoke test on synthetic formula labels. Says nothing about placement outcomes.",
-        "dataset": {"path": str(features_path), "sha256": hashlib.sha256(raw_bytes).hexdigest(),
-                    "rows": len(df), "students": int(n_splits), "origin": "seed.sql demo students"},
+        "dataset": {
+            "path": str(features_path),
+            "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+            "rows": len(df),
+            "students": int(n_splits),
+            "origin": "seed.sql demo students",
+        },
         "feature_schema_version": FEATURE_SCHEMA,
         "features": FEATURE_COLS,
         "target": TARGET,
         "label_noise": {"std": _LABEL_NOISE_STD, "seed": _LABEL_NOISE_SEED},
         "split": f"GroupKFold(n_splits={n_splits}) by student_id (leave-one-student-out); "
-                 "no untouched final test set: n is too small to hold one out",
+        "no untouched final test set: n is too small to hold one out",
         "seed": SEED,
         "code_revision": _git_rev(),
-        "runtime": {"python": sys.version.split()[0], "sklearn": sklearn.__version__,
-                    "pandas": pd.__version__, "numpy": np.__version__, "platform": platform.platform()},
+        "runtime": {
+            "python": sys.version.split()[0],
+            "sklearn": sklearn.__version__,
+            "pandas": pd.__version__,
+            "numpy": np.__version__,
+            "platform": platform.platform(),
+        },
         "metrics": metrics,
     }
-    body["report_sha256"] = hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+    body["report_sha256"] = hashlib.sha256(
+        json.dumps(body, sort_keys=True, default=str).encode()
+    ).hexdigest()
     return body
 
 
@@ -127,4 +142,6 @@ if __name__ == "__main__":
     path.write_text(json.dumps(report, indent=2, default=str))
     print(f"SYNTHETIC smoke test, no placement claim. Report: {path}")
     for k, m in report["metrics"].items():
-        print(f"  {k:<14} MAE {m['mae']:>7}  CI {m['mae_ci95_bootstrap']}  skill {m['skill_vs_mean']}")
+        print(
+            f"  {k:<14} MAE {m['mae']:>7}  CI {m['mae_ci95_bootstrap']}  skill {m['skill_vs_mean']}"
+        )

@@ -4,6 +4,7 @@ Static checks always run. DB checks run against a throwaway database that is cre
 here; they need a role allowed to CREATE DATABASE:
     TEST_ADMIN_DATABASE_URL=postgresql://<superuser>:<pw>@localhost:5432/postgres pytest tests/test_migrate.py
 """
+
 import os
 import re
 import uuid
@@ -22,6 +23,7 @@ ROOT = MIGRATIONS_DIR.parent
 
 
 # ── static ────────────────────────────────────────────────────────────
+
 
 def test_migrations_are_ordered_and_unique():
     names = [p.name for p in migration_files()]
@@ -42,6 +44,7 @@ def test_no_parallel_schema_file():
 
 # ── database ──────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def fresh_db():
     name = f"pis_test_{uuid.uuid4().hex[:10]}"
@@ -54,7 +57,9 @@ def fresh_db():
         yield dsn
     finally:
         with admin.cursor() as cur:
-            cur.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
+            cur.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
+            )
         admin.close()
 
 
@@ -72,9 +77,18 @@ def test_empty_database_migrates_and_rerun_is_noop(fresh_db):
     conn = psycopg2.connect(fresh_db)
     assert pending(conn) == []
     conn.close()
-    tables = {r[0] for r in _q(fresh_db, "SELECT tablename FROM pg_tables WHERE schemaname='public'")}
-    assert {"students", "coding_activity", "github_activity", "features", "predictions",
-            "prediction_history", "schema_migrations"} <= tables
+    tables = {
+        r[0] for r in _q(fresh_db, "SELECT tablename FROM pg_tables WHERE schemaname='public'")
+    }
+    assert {
+        "students",
+        "coding_activity",
+        "github_activity",
+        "features",
+        "predictions",
+        "prediction_history",
+        "schema_migrations",
+    } <= tables
     assert _q(fresh_db, "SELECT 1 FROM pg_constraint WHERE conname='uq_github_activity'")
 
 
@@ -92,8 +106,10 @@ def test_failing_migration_aborts_and_is_not_recorded(fresh_db, tmp_path):
 def test_github_ingest_is_idempotent(fresh_db):
     migrate(fresh_db)
     _q(fresh_db, "INSERT INTO students (name,email,branch) VALUES ('t','t@x.dev','CSE')")
-    ins = ("INSERT INTO github_activity (student_id,repo_name,commits,commit_date) "
-           "VALUES (1,'r',5,'2024-01-01') ON CONFLICT (student_id, repo_name, commit_date) DO NOTHING")
+    ins = (
+        "INSERT INTO github_activity (student_id,repo_name,commits,commit_date) "
+        "VALUES (1,'r',5,'2024-01-01') ON CONFLICT (student_id, repo_name, commit_date) DO NOTHING"
+    )
     _q(fresh_db, ins)
     _q(fresh_db, ins)
     assert _q(fresh_db, "SELECT COUNT(*) FROM github_activity")[0][0] == 1
@@ -104,12 +120,17 @@ def test_upgrade_dedupes_before_adding_unique(fresh_db, tmp_path):
     # Simulate a pre-migration database: baseline only, with duplicate GitHub rows.
     only_baseline = tmp_path / "m"
     only_baseline.mkdir()
-    (only_baseline / "000_baseline.sql").write_text((MIGRATIONS_DIR / "000_baseline.sql").read_text())
+    (only_baseline / "000_baseline.sql").write_text(
+        (MIGRATIONS_DIR / "000_baseline.sql").read_text()
+    )
     migrate(fresh_db, only_baseline)
     _q(fresh_db, "INSERT INTO students (name,email,branch) VALUES ('t','t@x.dev','CSE')")
     for _ in range(2):
-        _q(fresh_db, "INSERT INTO github_activity (student_id,repo_name,commits,commit_date) "
-                     "VALUES (1,'r',5,'2024-01-01')")
+        _q(
+            fresh_db,
+            "INSERT INTO github_activity (student_id,repo_name,commits,commit_date) "
+            "VALUES (1,'r',5,'2024-01-01')",
+        )
     migrate(fresh_db)  # upgrade with all migrations
     assert _q(fresh_db, "SELECT COUNT(*) FROM github_activity")[0][0] == 1
 

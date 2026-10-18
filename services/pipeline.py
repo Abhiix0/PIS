@@ -12,9 +12,7 @@ The router only handles HTTP concerns.
 """
 
 import time
-import psycopg2
-from datetime import datetime, date, timezone, timedelta
-from config import DATABASE_URL
+from datetime import UTC, datetime, timedelta
 
 # Real API calls are skipped if data was synced within this window.
 # Prevents hammering GitHub/LeetCode on every pipeline call.
@@ -26,30 +24,31 @@ def _is_fresh(last_synced) -> bool:
     if last_synced is None:
         return False
     # last_synced may be a tz-aware or tz-naive datetime depending on the driver
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if last_synced.tzinfo is None:
-        last_synced = last_synced.replace(tzinfo=timezone.utc)
+        last_synced = last_synced.replace(tzinfo=UTC)
     return (now - last_synced) < timedelta(hours=_SYNC_TTL_HOURS)
 
 
 def _get_student_usernames(student_id: int) -> dict:
     """Fetch usernames and last-sync timestamps for a student."""
     from ingest.db_connection import get_connection
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT github_username, leetcode_username,
                           github_last_synced, leetcode_last_synced
                    FROM students WHERE id = %s""",
-                (student_id,)
+                (student_id,),
             )
             row = cur.fetchone()
             if not row:
                 raise ValueError(f"Student {student_id} not found")
             return {
-                "github_username":      row[0],
-                "leetcode_username":    row[1],
-                "github_last_synced":   row[2],
+                "github_username": row[0],
+                "leetcode_username": row[1],
+                "github_last_synced": row[2],
                 "leetcode_last_synced": row[3],
             }
 
@@ -58,12 +57,10 @@ def _mark_synced(student_id: int, platform: str):
     """Stamp github_last_synced or leetcode_last_synced with NOW()."""
     col = "github_last_synced" if platform == "github" else "leetcode_last_synced"
     from ingest.db_connection import get_connection
+
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"UPDATE students SET {col} = NOW() WHERE id = %s",
-                (student_id,)
-            )
+            cur.execute(f"UPDATE students SET {col} = NOW() WHERE id = %s", (student_id,))
 
 
 def run(student_id: int, force_refresh: bool = False) -> dict:
@@ -86,30 +83,37 @@ def run(student_id: int, force_refresh: bool = False) -> dict:
     step_start = time.perf_counter()
     try:
         if usernames.get("leetcode_username"):
-            steps.append({
-                "step":        "coding_ingestion",
-                "status":      "skipped",
-                "data_source": "none",
-                "reason":      "LeetCode exposes solved-count aggregates only; the per-problem legacy table is left unchanged.",
-                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-            })
+            steps.append(
+                {
+                    "step": "coding_ingestion",
+                    "status": "skipped",
+                    "data_source": "none",
+                    "reason": "LeetCode exposes solved-count aggregates only; the per-problem legacy table is left unchanged.",
+                    "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+                }
+            )
         else:
             from ingest.coding import ingest_coding_activity
+
             result = ingest_coding_activity(student_id=student_id)
-            steps.append({
-                "step":             "coding_ingestion",
-                "status":           "success",
-                "data_source":      "synthetic",
-                "records_inserted": result.get("inserted", 0),
-                "duration_ms":      round((time.perf_counter() - step_start) * 1000, 1),
-            })
+            steps.append(
+                {
+                    "step": "coding_ingestion",
+                    "status": "success",
+                    "data_source": "synthetic",
+                    "records_inserted": result.get("inserted", 0),
+                    "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+                }
+            )
     except Exception as e:
-        steps.append({
-            "step":        "coding_ingestion",
-            "status":      "error",
-            "error":       str(e),
-            "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-        })
+        steps.append(
+            {
+                "step": "coding_ingestion",
+                "status": "error",
+                "error": str(e),
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
 
     # ── Step 2: GitHub ingestion ──────────────────────────────────────
     # A failed fetch is reported and leaves existing rows alone; it never falls back to synthetic data.
@@ -121,39 +125,60 @@ def run(student_id: int, force_refresh: bool = False) -> dict:
             else:
                 from ingest.github_api import fetch_github_data
                 from ingest.provider import ProviderError
+
                 try:
                     gh_records = fetch_github_data(usernames["github_username"])
                 except ProviderError as e:
                     step = {"status": "error", "data_source": "real_github_api", "error": e.code}
                 else:
                     from ingest.db_connection import get_connection
+
                     gh_inserted = 0
                     with get_connection() as conn:
                         cur = conn.cursor()
                         for r in gh_records:
-                            cur.execute("""
+                            cur.execute(
+                                """
                                 INSERT INTO github_activity
                                     (student_id, repo_name, commits, commit_date, provenance)
                                 VALUES
                                     (%(student_id)s, %(repo_name)s, %(commits)s, %(commit_date)s, 'observed')
                                 ON CONFLICT (student_id, repo_name, commit_date) DO NOTHING
-                            """, {"student_id": student_id, **r})
+                            """,
+                                {"student_id": student_id, **r},
+                            )
                             gh_inserted += cur.rowcount
                     _mark_synced(student_id, "github")
-                    step = {"status": "success", "data_source": "real_github_api", "records_inserted": gh_inserted}
+                    step = {
+                        "status": "success",
+                        "data_source": "real_github_api",
+                        "records_inserted": gh_inserted,
+                    }
         else:
             from ingest.github import ingest_github_activity
+
             result = ingest_github_activity(student_id=student_id)
-            step = {"status": "success", "data_source": "synthetic", "records_inserted": result.get("inserted", 0)}
-        steps.append({"step": "github_ingestion", **step,
-                      "duration_ms": round((time.perf_counter() - step_start) * 1000, 1)})
+            step = {
+                "status": "success",
+                "data_source": "synthetic",
+                "records_inserted": result.get("inserted", 0),
+            }
+        steps.append(
+            {
+                "step": "github_ingestion",
+                **step,
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
     except Exception as e:
-        steps.append({
-            "step":        "github_ingestion",
-            "status":      "error",
-            "error":       str(e),
-            "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-        })
+        steps.append(
+            {
+                "step": "github_ingestion",
+                "status": "error",
+                "error": str(e),
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
 
     # ── Step 3: Feature computation ───────────────────────────────────
     # Uses the parameterised single-student SQL variant — O(1) DB work,
@@ -161,68 +186,83 @@ def run(student_id: int, force_refresh: bool = False) -> dict:
     step_start = time.perf_counter()
     try:
         from features.compute import run_feature_sql_for_student
+
         run_feature_sql_for_student(student_id)
-        steps.append({
-            "step":        "feature_computation",
-            "status":      "success",
-            "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-        })
+        steps.append(
+            {
+                "step": "feature_computation",
+                "status": "success",
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
     except Exception as e:
-        steps.append({
-            "step":        "feature_computation",
-            "status":      "error",
-            "error":       str(e),
-            "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-        })
-        raise RuntimeError(f"Feature computation failed: {e}")
+        steps.append(
+            {
+                "step": "feature_computation",
+                "status": "error",
+                "error": str(e),
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
+        raise RuntimeError(f"Feature computation failed: {e}") from e
 
     # ── Step 4: ML prediction ─────────────────────────────────────────
     step_start = time.perf_counter()
     try:
         from ml.predict import predict
+
         prediction = predict(student_id)
-        steps.append({
-            "step":             "ml_prediction",
-            "status":           "success",
-            "readiness_score":  prediction["readiness_score"],
-            "category":         prediction["category"],
-            "duration_ms":      round((time.perf_counter() - step_start) * 1000, 1),
-        })
+        steps.append(
+            {
+                "step": "ml_prediction",
+                "status": "success",
+                "readiness_score": prediction["readiness_score"],
+                "category": prediction["category"],
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
     except Exception as e:
-        steps.append({
-            "step":        "ml_prediction",
-            "status":      "error",
-            "error":       str(e),
-            "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-        })
-        raise RuntimeError(f"ML prediction failed: {e}")
+        steps.append(
+            {
+                "step": "ml_prediction",
+                "status": "error",
+                "error": str(e),
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
+        raise RuntimeError(f"ML prediction failed: {e}") from e
 
     # ── Step 5: Insight generation ────────────────────────────────────
     step_start = time.perf_counter()
     try:
         from insights.engine import InsightEngine
+
         engine = InsightEngine()
         insight = engine.format_insight(student_id)
-        steps.append({
-            "step":             "insight_generation",
-            "status":           "success",
-            "weaknesses_found": len(insight.get("weaknesses", [])),
-            "duration_ms":      round((time.perf_counter() - step_start) * 1000, 1),
-        })
+        steps.append(
+            {
+                "step": "insight_generation",
+                "status": "success",
+                "weaknesses_found": len(insight.get("weaknesses", [])),
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
     except Exception as e:
-        steps.append({
-            "step":        "insight_generation",
-            "status":      "error",
-            "error":       str(e),
-            "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
-        })
-        raise RuntimeError(f"Insight generation failed: {e}")
+        steps.append(
+            {
+                "step": "insight_generation",
+                "status": "error",
+                "error": str(e),
+                "duration_ms": round((time.perf_counter() - step_start) * 1000, 1),
+            }
+        )
+        raise RuntimeError(f"Insight generation failed: {e}") from e
 
     total_ms = round((time.perf_counter() - start_time) * 1000, 1)
 
     return {
         **insight,
-        "pipeline_steps":    steps,
+        "pipeline_steps": steps,
         "total_duration_ms": total_ms,
-        "ran_at":            datetime.utcnow().isoformat(),
+        "ran_at": datetime.now(UTC).isoformat(),
     }

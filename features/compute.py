@@ -1,23 +1,23 @@
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-from ingest.db_connection import get_connection
+
+from ingest.db_connection import get_connection, query_df
 
 _ROOT = Path(__file__).parent.parent
 
-SQL_PATH        = _ROOT / "sql" / "feature_engineering.sql"
+SQL_PATH = _ROOT / "sql" / "feature_engineering.sql"
 SQL_SINGLE_PATH = _ROOT / "sql" / "feature_engineering_single.sql"
-FEATURES_CSV    = _ROOT / "features" / "features_scaled.csv"
-RAW_CSV         = _ROOT / "features" / "features_raw.csv"
+FEATURES_CSV = _ROOT / "features" / "features_scaled.csv"
+RAW_CSV = _ROOT / "features" / "features_raw.csv"
 
 # Bump on any change to a feature's SQL, units or scaling, and update docs/data-dictionary/features.md.
 FEATURE_SCHEMA_VERSION = "features-v1"
 
 # Columns that will be scaled — cgpa included because ML needs it normalized
-SCALE_COLS = [
-    'cgpa', 'total_problems', 'avg_difficulty',
-    'consistency_score', 'commit_frequency'
-]
+SCALE_COLS = ["cgpa", "total_problems", "avg_difficulty", "consistency_score", "commit_frequency"]
+
 
 def run_feature_sql():
     """Execute the full-table SQL pipeline to populate the features table.
@@ -42,6 +42,7 @@ def run_feature_sql_for_student(student_id: int):
             cur.execute(sql, {"student_id": student_id})
     print(f"Feature SQL executed — student {student_id} features updated.")
 
+
 def load_features() -> pd.DataFrame:
     """Pull features + cgpa from DB into a single DataFrame."""
     query = """
@@ -59,8 +60,9 @@ def load_features() -> pd.DataFrame:
         ORDER BY s.id
     """
     with get_connection() as conn:
-        df = pd.read_sql(query, conn)
+        df = query_df(conn, query)
     return df
+
 
 def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     """Apply Min-Max scaling to numeric feature columns.
@@ -76,7 +78,7 @@ def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     scaler = MinMaxScaler()
     df_scaled[SCALE_COLS] = scaler.fit_transform(df[SCALE_COLS])
 
-    joblib.dump(scaler, Path('models/scaler.pkl'))
+    joblib.dump(scaler, Path("models/scaler.pkl"))
     print("Scaler saved → models/scaler.pkl")
 
     # Round to 4 decimal places — keeps CSV readable
@@ -85,17 +87,19 @@ def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     print(f"Scaled features saved → {FEATURES_CSV}")
     return df_scaled
 
+
 def print_summary(raw: pd.DataFrame, scaled: pd.DataFrame):
     """Print a side-by-side summary for quick sanity checking."""
     print("\n── Raw feature ranges ──────────────────")
-    print(raw[SCALE_COLS].agg(['min', 'max', 'mean']).round(3))
+    print(raw[SCALE_COLS].agg(["min", "max", "mean"]).round(3))
     print("\n── Scaled feature ranges (should all be 0–1) ──")
-    print(scaled[SCALE_COLS].agg(['min', 'max', 'mean']).round(3))
+    print(scaled[SCALE_COLS].agg(["min", "max", "mean"]).round(3))
     print("\n── Per-student scaled features ─────────")
-    print(scaled[['name'] + SCALE_COLS].to_string(index=False))
+    print(scaled[["name"] + SCALE_COLS].to_string(index=False))
+
 
 if __name__ == "__main__":
-    run_feature_sql()          # Step 1: populate features table
-    raw    = load_features()   # Step 2: pull into Pandas
+    run_feature_sql()  # Step 1: populate features table
+    raw = load_features()  # Step 2: pull into Pandas
     scaled = scale_features(raw)  # Step 3: scale + export CSVs
-    print_summary(raw, scaled) # Step 4: sanity check output
+    print_summary(raw, scaled)  # Step 4: sanity check output

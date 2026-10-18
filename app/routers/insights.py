@@ -1,8 +1,10 @@
 import os
-from fastapi         import APIRouter, Depends, HTTPException, Query
-from app.auth        import require_operator
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.auth import require_operator
 from app.logger import logger
-from app.schemas     import InsightResponse, RankingItem
+from app.schemas import InsightResponse, RankingItem
 from ingest.db_connection import get_connection
 from insights.engine import InsightEngine
 
@@ -39,20 +41,21 @@ def get_insights(student_id: int):
         result = _get_engine().format_insight(student_id)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    except Exception:
         logger.exception("insights failed")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail="Internal server error") from None
 
 
 @router.get("/ranking", response_model=list[RankingItem])
 def get_ranking(
     branch: str = Query(None, description="Filter by branch e.g. CSE"),
-    limit:  int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=100),
 ):
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 WITH scored AS (
                     SELECT s.id, s.name, s.branch, s.cgpa,
                            f.total_problems, f.consistency_score,
@@ -74,7 +77,9 @@ def get_ranking(
                 WHERE (%s IS NULL OR branch = %s)
                 ORDER BY global_rank
                 LIMIT %s
-            """, (branch, branch, limit))
+            """,
+                (branch, branch, limit),
+            )
             rows = cur.fetchall()
             cols = [desc[0] for desc in cur.description]
             return [dict(zip(cols, r)) for r in rows]

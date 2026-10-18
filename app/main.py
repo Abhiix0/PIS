@@ -1,20 +1,29 @@
-import time as time_module
+import time
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 
-from fastapi           import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import config
-from ingest.db_connection import get_connection, close_pool
-from ingest.migrate import pending
-from ml.bundle import load_active, active_version
 from app.logger import logger
-from app.routers import students, ingest, predictions, insights, features, pipeline, admin, profiles, integrations, v1
-
+from app.routers import (
+    admin,
+    features,
+    ingest,
+    insights,
+    integrations,
+    pipeline,
+    predictions,
+    profiles,
+    students,
+    v1,
+)
+from ingest.db_connection import close_pool, get_connection
+from ingest.migrate import pending
+from ml.bundle import active_version, load_active
 
 
 def check_db_connection() -> bool:
@@ -36,8 +45,7 @@ async def lifespan(app: FastAPI):
     if config.DATABASE_URL:
         if not check_db_connection():
             errors.append(
-                "DATABASE_URL is set but database is unreachable. "
-                "Check PostgreSQL connection."
+                "DATABASE_URL is set but database is unreachable. Check PostgreSQL connection."
             )
         else:
             try:
@@ -53,23 +61,24 @@ async def lifespan(app: FastAPI):
         try:
             active_model = load_active().version  # verifies checksums and feature schema
         except Exception as e:
-            errors.append(f"No usable active model: {e}. Train, then: python -m ml.bundle approve/activate <version> --by <you>")
+            errors.append(
+                f"No usable active model: {e}. Train, then: python -m ml.bundle approve/activate <version> --by <you>"
+            )
 
     if errors:
         for error in errors:
             print(f"[STARTUP ERROR] {error}")
         raise RuntimeError(
-            f"Startup failed with {len(errors)} error(s). "
-            f"See logs above for details."
+            f"Startup failed with {len(errors)} error(s). See logs above for details."
         )
 
     if not (config.AUTH_ISSUER and config.AUTH_AUDIENCE and config.AUTH_JWKS_URL):
         print("[STARTUP WARNING] AUTH_* not configured. Every protected endpoint will return 401.")
 
-    print(f"PIS API started successfully")
-    print(f"  Database: connected")
+    print("PIS API started successfully")
+    print("  Database: connected")
     print(f"  Model:    {active_model} (verified)")
-    print(f"  Docs:     http://localhost:8000/docs")
+    print("  Docs:     http://localhost:8000/docs")
 
     yield
     close_pool()
@@ -102,8 +111,19 @@ app.include_router(v1.router)
 
 
 # ── /api/v1 error envelope: {"error": {code, message, request_id}}. Legacy routes keep {"detail": ...}. ──
-_CODES = {500: "internal_error", 400: "bad_request", 401: "unauthenticated", 403: "forbidden", 404: "not_found", 409: "conflict",
-          413: "payload_too_large", 422: "validation_error", 429: "rate_limited", 501: "not_implemented", 503: "unavailable"}
+_CODES = {
+    500: "internal_error",
+    400: "bad_request",
+    401: "unauthenticated",
+    403: "forbidden",
+    404: "not_found",
+    409: "conflict",
+    413: "payload_too_large",
+    422: "validation_error",
+    429: "rate_limited",
+    501: "not_implemented",
+    503: "unavailable",
+}
 
 
 def _envelope(request: Request, status: int, message, headers=None):
@@ -116,12 +136,16 @@ def _envelope(request: Request, status: int, message, headers=None):
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if request.url.path.startswith("/api/v1"):
         return _envelope(request, exc.status_code, exc.detail, exc.headers)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers
+    )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
-    errs = [{"loc": [str(x) for x in e["loc"]], "msg": e["msg"]} for e in exc.errors()]  # no echoed input values
+    errs = [
+        {"loc": [str(x) for x in e["loc"]], "msg": e["msg"]} for e in exc.errors()
+    ]  # no echoed input values
     if request.url.path.startswith("/api/v1"):
         return _envelope(request, 422, errs)
     return JSONResponse(status_code=422, content={"detail": errs})
@@ -139,8 +163,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error", "request_id": rid},
     )
 
+
 # ── Health check endpoints ────────────────────────────────────────────
-_startup_time = time_module.time()
+_startup_time = time.time()
 
 
 @app.get("/health", tags=["System"])
@@ -170,14 +195,14 @@ def health_ready():
 @app.get("/health/detailed", tags=["System"])
 def health_detailed():
     """Detailed health check showing system component status."""
-    db_ok  = check_db_connection()
+    db_ok = check_db_connection()
     try:
         model_version = active_version()
     except Exception:
         model_version = None
 
     features_freshness = None
-    student_count      = 0
+    student_count = 0
 
     try:
         with get_connection() as conn:
@@ -193,21 +218,21 @@ def health_detailed():
     except Exception:
         pass
 
-    uptime_seconds = round(time_module.time() - _startup_time)
+    uptime_seconds = round(time.time() - _startup_time)
 
     return {
-        "status":             "ok" if db_ok and model_version else "degraded",
-        "version":            app.version,
-        "uptime_seconds":     uptime_seconds,
-        "database":           "connected" if db_ok else "disconnected",
-        "model_version":       model_version,
+        "status": "ok" if db_ok and model_version else "degraded",
+        "version": app.version,
+        "uptime_seconds": uptime_seconds,
+        "database": "connected" if db_ok else "disconnected",
+        "model_version": model_version,
         "features_freshness": features_freshness,
-        "student_count":      student_count,
+        "student_count": student_count,
     }
 
 
 # ── Request logging middleware ────────────────────────────────────────
-import time
+
 
 @app.middleware("http")
 async def limit_body(request: Request, call_next):
@@ -221,7 +246,7 @@ async def limit_body(request: Request, call_next):
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    start    = time.perf_counter()
+    start = time.perf_counter()
     request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
     request.state.request_id = request_id
     response = await call_next(request)
@@ -235,7 +260,12 @@ async def log_requests(request: Request, call_next):
         f"[{request_id}] {request.method:<6} {request.url.path:<35} "
         f"student={student_id:<4} status={response.status_code} "
         f"duration={duration:.1f}ms",
-        extra={"request_id": request_id, "method": request.method, "path": request.url.path,
-               "status": response.status_code, "duration_ms": round(duration, 1)},
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": round(duration, 1),
+        },
     )
     return response

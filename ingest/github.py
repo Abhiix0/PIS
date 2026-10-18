@@ -1,24 +1,31 @@
 import random
 from datetime import date, timedelta
+
 from ingest.db_connection import get_connection
 from ingest.validators import validate_github_record
 
 # Profile map: student_id → list of (repo_name, max_commits, date_spread_days)
 GITHUB_PROFILES = {
-    1: [('dsa-solutions', 80, 180), ('ml-project', 60, 150),
-         ('portfolio', 40, 120), ('api-server', 55, 90)],
-    2: [('competitive-cp', 70, 160), ('web-app', 50, 130),
-         ('blog-site', 35, 100)],
-    3: [('leetcode-grind', 10, 60)],             # coder, weak GH
-    4: [('practice-repo', 8, 45)],
-    5: [('open-source-contrib', 120, 180),        # GH-heavy
-         ('devtools', 90, 150), ('cli-utils', 75, 120),
-         ('react-components', 60, 100)],
-    6: [('fullstack-app', 100, 170), ('data-viz', 80, 140),
-         ('automation-scripts', 55, 110)],
-    7: [('hello-world', 4, 30)],                # weak overall
-    8: [],                                        # zero GitHub activity
+    1: [
+        ("dsa-solutions", 80, 180),
+        ("ml-project", 60, 150),
+        ("portfolio", 40, 120),
+        ("api-server", 55, 90),
+    ],
+    2: [("competitive-cp", 70, 160), ("web-app", 50, 130), ("blog-site", 35, 100)],
+    3: [("leetcode-grind", 10, 60)],  # coder, weak GH
+    4: [("practice-repo", 8, 45)],
+    5: [
+        ("open-source-contrib", 120, 180),  # GH-heavy
+        ("devtools", 90, 150),
+        ("cli-utils", 75, 120),
+        ("react-components", 60, 100),
+    ],
+    6: [("fullstack-app", 100, 170), ("data-viz", 80, 140), ("automation-scripts", 55, 110)],
+    7: [("hello-world", 4, 30)],  # weak overall
+    8: [],  # zero GitHub activity
 }
+
 
 def generate_github_records(student_id: int) -> list[dict]:
     repos = GITHUB_PROFILES[student_id]
@@ -31,17 +38,20 @@ def generate_github_records(student_id: int) -> list[dict]:
         for _ in range(num_snapshots):
             days_offset = random.randint(0, spread)
             commits = random.randint(1, max(1, max_commits // num_snapshots))
-            records.append({
-                'student_id':  student_id,
-                'repo_name':   repo_name,
-                'commits':     commits,
-                'commit_date': start_date + timedelta(days=days_offset),
-            })
+            records.append(
+                {
+                    "student_id": student_id,
+                    "repo_name": repo_name,
+                    "commits": commits,
+                    "commit_date": start_date + timedelta(days=days_offset),
+                }
+            )
     return records
 
-def ingest_github_activity(student_id: int = None) -> dict:
+
+def ingest_github_activity(student_id: int | None = None) -> dict:
     total_inserted = 0
-    total_skipped  = 0
+    total_skipped = 0
 
     if student_id is not None:
         if student_id not in GITHUB_PROFILES:
@@ -67,14 +77,17 @@ def ingest_github_activity(student_id: int = None) -> dict:
                     total_skipped += 1
                     continue
 
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO github_activity
                         (student_id, repo_name, commits, commit_date)
                     VALUES
                         (%(student_id)s, %(repo_name)s,
                          %(commits)s, %(commit_date)s)
                     ON CONFLICT (student_id, repo_name, commit_date) DO NOTHING
-                """, record)
+                """,
+                    record,
+                )
 
                 if cur.rowcount == 1:
                     total_inserted += 1
@@ -82,7 +95,7 @@ def ingest_github_activity(student_id: int = None) -> dict:
                     total_skipped += 1
 
     print(f"GitHub ingestion complete: {total_inserted} inserted, {total_skipped} skipped")
-    return {'inserted': total_inserted, 'skipped': total_skipped}
+    return {"inserted": total_inserted, "skipped": total_skipped}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,29 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["venv", "apps", "node_modules"]
+
+[tool.ruff.lint]
+# S-lite: hardcoded passwords, assert-free checks off; SQL-string and subprocess rules stay out.
+select = ["E", "F", "I", "B", "UP", "DTZ", "S105", "S106", "S301", "S307", "S324", "S501", "S506"]
+
+# E501: the formatter wraps code to 100 but cannot wrap SQL strings and comments; linting them
+# would force churn in SQL literals. Revisit when SQL moves to files.
+# B008: FastAPI Depends()/Query() in defaults is the framework idiom (see immutable-calls).
+# B905: zips here pair equal-length column/row lists; strict= adds noise, not safety.
+# DTZ011: date.today() is intentional local-calendar logic (age-of-record checks, synthetic demo dates).
+ignore = ["E501", "B905", "DTZ011"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]  # fixture tokens/passwords are fake
+"tests/test_bundle.py" = ["B008"]  # len() default is a constant, evaluated once
+"tests/test_ingestion_contracts.py" = ["DTZ001"]  # naive datetime is the case under test
+
+[tool.mypy]
+# Lenient baseline: only these packages, no strict flags. Tighten per package later.
+files = ["app", "services", "ml", "ingest"]
+ignore_missing_imports = true
+check_untyped_defs = false

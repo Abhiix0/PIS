@@ -1,4 +1,5 @@
 """Token verification and server-side authorization. The IdP issues tokens; this module only verifies them."""
+
 import threading
 import time
 from collections import defaultdict, deque
@@ -35,10 +36,14 @@ def _hit(key: str, limit: int, window: int) -> bool:
 
 def rate_limit(name: str, limit: int, window: int = 60):
     """Dependency factory: per-caller (token subject if known, else client IP) limit for `name`."""
+
     def dep(request: Request):
-        who = getattr(request.state, "rl_subject", None) or (request.client.host if request.client else "?")
+        who = getattr(request.state, "rl_subject", None) or (
+            request.client.host if request.client else "?"
+        )
         if not _hit(f"{name}:{who}", limit, window):
             raise HTTPException(status_code=429, detail="Too many requests")
+
     return dep
 
 
@@ -65,11 +70,14 @@ def _load_user(subject: str, email: str | None) -> dict:
     """Get-or-create the users row for an IdP subject."""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO users (auth_subject, email) VALUES (%s, %s)
                 ON CONFLICT (auth_subject) DO UPDATE SET auth_subject = EXCLUDED.auth_subject
                 RETURNING id::text, status, sessions_valid_after
-            """, (subject, email))
+            """,
+                (subject, email),
+            )
             uid, status, valid_after = cur.fetchone()
     return {"id": uid, "status": status, "valid_after": valid_after}
 
@@ -88,11 +96,16 @@ def current_principal(request: Request, creds=Depends(_bearer)) -> Principal:
     try:
         token = creds.credentials
         claims = jwt.decode(
-            token, _signing_key(token), algorithms=["RS256"],
-            audience=config.AUTH_AUDIENCE, issuer=config.AUTH_ISSUER,
+            token,
+            _signing_key(token),
+            algorithms=["RS256"],
+            audience=config.AUTH_AUDIENCE,
+            issuer=config.AUTH_ISSUER,
             options={"require": ["exp", "iat", "sub"]},
         )
-    except Exception:  # expired, bad signature, wrong aud/iss, JWKS failure: indistinguishable to the caller
+    except (
+        Exception
+    ):  # expired, bad signature, wrong aud/iss, JWKS failure: indistinguishable to the caller
         _reject(ip)
     user = _load_user(claims["sub"], claims.get("email"))
     if user["status"] != "active":

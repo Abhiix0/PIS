@@ -11,7 +11,9 @@ Provider = Literal["github", "leetcode"]
 
 
 class ConnectIn(BaseModel):
-    username: str = Field(..., min_length=1, max_length=64)  # public username only; no tokens are accepted
+    username: str = Field(
+        ..., min_length=1, max_length=64
+    )  # public username only; no tokens are accepted
 
 
 def _refused(e: sync.SyncRefused):
@@ -42,5 +44,9 @@ def run_sync(provider: Provider, p: Principal = Depends(current_principal)):
 
 
 @router.get("/{provider}/sync-runs")
-def sync_runs(provider: Provider, limit: int = Query(10, ge=1, le=50), p: Principal = Depends(current_principal)):
+def sync_runs(
+    provider: Provider,
+    limit: int = Query(10, ge=1, le=50),
+    p: Principal = Depends(current_principal),
+):
     return sync.list_runs(p.user_id, provider, limit)

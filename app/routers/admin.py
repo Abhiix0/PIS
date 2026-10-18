@@ -1,22 +1,23 @@
-import json
 import shutil
 import threading
-from pathlib  import Path
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import Principal, require_operator, expensive
+from app.auth import Principal, expensive, require_operator
 from ingest.db_connection import get_connection
 from ml import bundle
 from services import privacy
 
-router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_operator), Depends(expensive)])
+router = APIRouter(
+    prefix="/admin", tags=["Admin"], dependencies=[Depends(require_operator), Depends(expensive)]
+)
 
-_LIVE_DIR    = Path("models")
+_LIVE_DIR = Path("models")
 _STAGING_DIR = Path("models/staging")
 
-_retrain_lock   = threading.Lock()
+_retrain_lock = threading.Lock()
 _retrain_status: dict = {"state": "idle", "last_ran": None, "error": None, "metrics": {}}
 
 
@@ -27,12 +28,14 @@ def _run_retrain():
 
     try:
         # Step 1: recompute features (full-table batch); saves scaler.pkl, which travels with the bundle
-        from features.compute import run_feature_sql, load_features, scale_features
+        from features.compute import load_features, run_feature_sql, scale_features
+
         run_feature_sql()
         scale_features(load_features())
 
         # Step 2: train into the staging directory
         import ml.train as trainer
+
         _, X, y_score, y_cat = trainer.load_data()
         reg = trainer.train_regressor(X, y_score)
         clf = trainer.train_classifier(X, y_cat)
@@ -41,26 +44,29 @@ def _run_retrain():
 
         # Step 3: freeze + smoke-test + register as a candidate (rejected if the smoke test fails)
         from ml.bundle import create_candidate
-        reg_imp = importances.get('regressor', {})
-        version = create_candidate(_STAGING_DIR, {"label_origin": "synthetic_formula", "students": len(X)})
+
+        reg_imp = importances.get("regressor", {})
+        version = create_candidate(
+            _STAGING_DIR, {"label_origin": "synthetic_formula", "students": len(X)}
+        )
         _retrain_status = {
-            "state":    "completed",
-            "last_ran": datetime.utcnow().isoformat(),
-            "error":    None,
-            "metrics":  {
+            "state": "completed",
+            "last_ran": datetime.now(UTC).isoformat(),
+            "error": None,
+            "metrics": {
                 "candidate_version": version,
-                "top_feature":       max(reg_imp, key=reg_imp.get) if reg_imp else None,
-                "top_importance":    round(max(reg_imp.values()), 3) if reg_imp else None,
-                "students_trained":  len(X),
+                "top_feature": max(reg_imp, key=reg_imp.get) if reg_imp else None,
+                "top_importance": round(max(reg_imp.values()), 3) if reg_imp else None,
+                "students_trained": len(X),
             },
         }
 
     except Exception as e:
         _retrain_status = {
-            "state":    "failed",
-            "last_ran": datetime.utcnow().isoformat(),
-            "error":    str(e),
-            "metrics":  {},
+            "state": "failed",
+            "last_ran": datetime.now(UTC).isoformat(),
+            "error": str(e),
+            "metrics": {},
         }
         # The active model is untouched
 
@@ -88,7 +94,10 @@ def trigger_retrain(p: Principal = Depends(require_operator)):
     t = threading.Thread(target=_run_retrain, daemon=True)
     t.start()
 
-    return {"status": "accepted", "message": "Retrain started in background. Poll GET /admin/retrain/status."}
+    return {
+        "status": "accepted",
+        "message": "Retrain started in background. Poll GET /admin/retrain/status.",
+    }
 
 
 @router.get("/retrain/status")
@@ -106,7 +115,7 @@ def _guard(fn, *args):
     try:
         return fn(*args)
     except bundle.BundleError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from None
 
 
 @router.get("/models")
@@ -139,8 +148,11 @@ def rollback_model(p: Principal = Depends(require_operator)):
 def audit_events(limit: int = 100):
     """Newest first: action, actor ids and target only. Never personal data or secrets."""
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id::text, action, actor_user_id::text, actor_subject, target, created_at FROM audit_events "
-                    "ORDER BY created_at DESC LIMIT %s", (max(1, min(limit, 500)),))
+        cur.execute(
+            "SELECT id::text, action, actor_user_id::text, actor_subject, target, created_at FROM audit_events "
+            "ORDER BY created_at DESC LIMIT %s",
+            (max(1, min(limit, 500)),),
+        )
         keys = ("id", "action", "actor_user_id", "actor_subject", "target", "created_at")
         return [dict(zip(keys, r)) for r in cur.fetchall()]
 
@@ -150,8 +162,19 @@ def sync_failures(limit: int = 50):
     """Failed/partial sync runs with sanitized diagnostics: provider, status, safe error code, counts. No user,
     username or profile fields are selected, so operators cannot browse personal data through this."""
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT r.id::text, c.provider, r.status, r.safe_error_code, r.records_rejected, r.started_at, "
-                    "r.completed_at FROM sync_runs r JOIN integration_connections c ON c.id = r.connection_id "
-                    "WHERE r.status IN ('failed','partial') ORDER BY r.started_at DESC LIMIT %s", (max(1, min(limit, 200)),))
-        keys = ("id", "provider", "status", "safe_error_code", "records_rejected", "started_at", "completed_at")
+        cur.execute(
+            "SELECT r.id::text, c.provider, r.status, r.safe_error_code, r.records_rejected, r.started_at, "
+            "r.completed_at FROM sync_runs r JOIN integration_connections c ON c.id = r.connection_id "
+            "WHERE r.status IN ('failed','partial') ORDER BY r.started_at DESC LIMIT %s",
+            (max(1, min(limit, 200)),),
+        )
+        keys = (
+            "id",
+            "provider",
+            "status",
+            "safe_error_code",
+            "records_rejected",
+            "started_at",
+            "completed_at",
+        )
         return [dict(zip(keys, r)) for r in cur.fetchall()]

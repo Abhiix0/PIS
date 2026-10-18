@@ -1,5 +1,4 @@
 import json
-import shutil
 
 import numpy as np
 import pandas as pd
@@ -16,14 +15,21 @@ def _artifacts(d, n_features=len(FEATURE_COLS)):
     rng = np.random.default_rng(0)
     X = pd.DataFrame(rng.random((30, n_features)) * 10, columns=FEATURE_COLS[:n_features])
     import joblib
+
     scaler = MinMaxScaler().fit(X)
     Xs = pd.DataFrame(scaler.transform(X), columns=X.columns)
     y = Xs.mean(axis=1) * 100
-    joblib.dump(RandomForestRegressor(n_estimators=5, random_state=0).fit(Xs, y), d / "regressor.pkl")
+    joblib.dump(
+        RandomForestRegressor(n_estimators=5, random_state=0).fit(Xs, y), d / "regressor.pkl"
+    )
     cat = np.where(y >= 65, "Ready", np.where(y >= 40, "Near Ready", "Needs Improvement"))
-    joblib.dump(RandomForestClassifier(n_estimators=5, random_state=0).fit(Xs, cat), d / "classifier.pkl")
+    joblib.dump(
+        RandomForestClassifier(n_estimators=5, random_state=0).fit(Xs, cat), d / "classifier.pkl"
+    )
     joblib.dump(scaler, d / "scaler.pkl")
-    (d / "feature_importances.json").write_text(json.dumps({"regressor": dict.fromkeys(FEATURE_COLS, 0.2), "classifier": {}}))
+    (d / "feature_importances.json").write_text(
+        json.dumps({"regressor": dict.fromkeys(FEATURE_COLS, 0.2), "classifier": {}})
+    )
 
 
 @pytest.fixture
@@ -73,15 +79,18 @@ def test_candidate_cannot_activate_without_approval_and_rollback_works(registry)
     first, second = _candidate(registry), _candidate(registry)
     with pytest.raises(BundleError):
         bundle.activate(first, "op")  # still a candidate
-    bundle.approve(first, "op", "ok"); bundle.activate(first, "op")
-    bundle.approve(second, "op"); bundle.activate(second, "op")
+    bundle.approve(first, "op", "ok")
+    bundle.activate(first, "op")
+    bundle.approve(second, "op")
+    bundle.activate(second, "op")
     assert bundle.active_version() == second
     assert bundle.rollback("op") == first and bundle.active_version() == first
 
 
 def test_failed_activation_keeps_previous_model(registry):
     good, bad = _candidate(registry), _candidate(registry)
-    bundle.approve(good, "op"); bundle.activate(good, "op")
+    bundle.approve(good, "op")
+    bundle.activate(good, "op")
     bundle.approve(bad, "op")
     (bundle.BUNDLES_DIR / bad / "scaler.pkl").write_bytes(b"corrupt")
     with pytest.raises(BundleError):
@@ -90,7 +99,8 @@ def test_failed_activation_keeps_previous_model(registry):
 
 
 def test_rejected_candidate_cannot_be_approved(registry):
-    src = registry / "bad"; src.mkdir()
+    src = registry / "bad"
+    src.mkdir()
     _artifacts(src, n_features=4)  # wrong feature count for the schema
     v = bundle.create_candidate(src)
     with pytest.raises(BundleError):
@@ -99,10 +109,15 @@ def test_rejected_candidate_cannot_be_approved(registry):
 
 def test_predict_records_version_snapshot_and_history_is_immutable(registry):
     from ml.predict import predict
+
     v = _candidate(registry)
-    bundle.approve(v, "op"); bundle.activate(v, "op")
+    bundle.approve(v, "op")
+    bundle.activate(v, "op")
     r = predict(1)
-    assert r["model_version"] == v and r["assessment_type"] in ("ml_readiness_proxy", "insufficient_evidence")
+    assert r["model_version"] == v and r["assessment_type"] in (
+        "ml_readiness_proxy",
+        "insufficient_evidence",
+    )
     assert (r["readiness_score"] is None) == (r["assessment_type"] == "insufficient_evidence")
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT model_version, input_snapshot FROM predictions WHERE student_id=1")
@@ -115,6 +130,7 @@ def test_predict_records_version_snapshot_and_history_is_immutable(registry):
 
 def test_insufficient_inputs_give_no_score():
     from ml.predict import _insufficient_reason
+
     ok = dict.fromkeys(FEATURE_COLS, 1.0)
     assert _insufficient_reason(ok) is None
     assert "No computed features" in _insufficient_reason(None)

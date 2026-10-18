@@ -28,10 +28,12 @@ def last_page(n):
 
 def router(listing, commits):
     """requests.get stand-in: `listing` answers /users/..., `commits(repo_name)` answers /repos/.../commits."""
+
     def fake(url, **kw):
         if "/users/" in url:
             return listing
         return commits(url.split("/")[-2])
+
     return fake
 
 
@@ -53,9 +55,16 @@ def test_success_records_author_commit_counts_with_repo_push_precision():
     o = by_type(obs)
     assert o[("github_public_repo_count", None)].value_num == 1
     c = o[("github_repo_commit_count", "a")]
-    assert (c.value_num, c.event_at_precision, c.granularity, c.provenance) == (42, "repo_push", "aggregate", "observed")
+    assert (c.value_num, c.event_at_precision, c.granularity, c.provenance) == (
+        42,
+        "repo_push",
+        "aggregate",
+        "observed",
+    )
     commit_call = [c for c in g.call_args_list if "/commits" in c.args[0]][0]
-    assert commit_call.kwargs["params"]["author"] == "testuser"  # attributed commits, not the repo total
+    assert (
+        commit_call.kwargs["params"]["author"] == "testuser"
+    )  # attributed commits, not the repo total
 
 
 def test_forks_are_excluded():
@@ -79,15 +88,18 @@ def test_empty_repo_counts_zero_commits():
     assert by_type(obs)[("github_repo_commit_count", "a")].value_num == 0
 
 
-@pytest.mark.parametrize("status,headers,code", [
-    (404, {}, "not_found"),
-    (429, {"Retry-After": "30"}, "rate_limited"),
-    (403, {"X-RateLimit-Remaining": "0"}, "rate_limited"),
-    (403, {"Retry-After": "60"}, "rate_limited"),
-    (403, {}, "forbidden"),
-    (401, {}, "forbidden"),
-    (422, {}, "unavailable"),
-])
+@pytest.mark.parametrize(
+    "status,headers,code",
+    [
+        (404, {}, "not_found"),
+        (429, {"Retry-After": "30"}, "rate_limited"),
+        (403, {"X-RateLimit-Remaining": "0"}, "rate_limited"),
+        (403, {"Retry-After": "60"}, "rate_limited"),
+        (403, {}, "forbidden"),
+        (401, {}, "forbidden"),
+        (422, {}, "unavailable"),
+    ],
+)
 def test_listing_errors_map_to_safe_codes(status, headers, code):
     with patch("requests.get", return_value=resp(status, headers=headers)):
         with pytest.raises(ProviderError) as e:
@@ -124,8 +136,10 @@ def test_malformed_listing_raises(body):
 
 
 def test_partial_when_one_repo_lookup_fails_and_that_repo_is_omitted_not_guessed():
-    fake = router(resp(body=[repo("a"), repo("b")]),
-                  lambda r: resp(500) if r == "b" else resp(body=[{}], headers=last_page(5)))
+    fake = router(
+        resp(body=[repo("a"), repo("b")]),
+        lambda r: resp(500) if r == "b" else resp(body=[{}], headers=last_page(5)),
+    )
     with patch("requests.get", side_effect=fake):
         obs, partial = fetch_github_observations("testuser")
     assert partial is True
@@ -157,8 +171,10 @@ def test_bad_username_never_reaches_the_network(name):
 
 
 def test_legacy_shape_uses_push_date_and_skips_zero_commit_repos():
-    fake = router(resp(body=[repo("a"), repo("b")]),
-                  lambda r: resp(body=[{}], headers=last_page(3)) if r == "a" else resp(status=409))
+    fake = router(
+        resp(body=[repo("a"), repo("b")]),
+        lambda r: resp(body=[{}], headers=last_page(3)) if r == "a" else resp(status=409),
+    )
     with patch("requests.get", side_effect=fake):
         rows = fetch_github_data("testuser")
     assert len(rows) == 1 and rows[0]["repo_name"] == "a" and rows[0]["commits"] == 3

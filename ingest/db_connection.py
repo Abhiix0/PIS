@@ -1,6 +1,8 @@
-import psycopg2
-from psycopg2 import pool
 from contextlib import contextmanager
+
+import pandas as pd
+from psycopg2 import pool
+
 from config import DATABASE_URL
 
 # Lazy-initialized pool — created on first use, not at import time.
@@ -13,14 +15,14 @@ def _get_pool() -> pool.ThreadedConnectionPool:
     if _pool is None:
         if not DATABASE_URL:
             raise RuntimeError(
-                "DATABASE_URL is not set. "
-                "Check your .env file or environment variables."
+                "DATABASE_URL is not set. Check your .env file or environment variables."
             )
         # maxconn=20 handles concurrent batch pipeline requests safely.
         # SQLAlchemy pool uses up to 15 (pool_size=5 + max_overflow=10),
         # leaving 65+ connections free under Postgres default max_connections=100.
-        _pool = pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=DATABASE_URL,
-                                             options="-c timezone=UTC")  # API timestamps are UTC
+        _pool = pool.ThreadedConnectionPool(
+            minconn=2, maxconn=20, dsn=DATABASE_URL, options="-c timezone=UTC"
+        )  # API timestamps are UTC
     return _pool
 
 
@@ -44,3 +46,10 @@ def get_connection():
         raise
     finally:
         _get_pool().putconn(conn)
+
+
+def query_df(conn, sql: str, params=None) -> pd.DataFrame:
+    """Run a query on a psycopg2 connection and return a DataFrame (pd.read_sql warns on raw conns)."""
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return pd.DataFrame(cur.fetchall(), columns=[c.name for c in cur.description])

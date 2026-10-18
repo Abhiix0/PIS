@@ -9,12 +9,21 @@ from ingest.provider import ProviderError
 
 def gql(counts=None, status=200, body=None):
     if counts is None:
-        counts = [{"difficulty": "All", "count": 10}, {"difficulty": "Easy", "count": 5},
-                  {"difficulty": "Medium", "count": 4}, {"difficulty": "Hard", "count": 1}]
+        counts = [
+            {"difficulty": "All", "count": 10},
+            {"difficulty": "Easy", "count": 5},
+            {"difficulty": "Medium", "count": 4},
+            {"difficulty": "Hard", "count": 1},
+        ]
     m = MagicMock()
     m.status_code = status
-    m.json.return_value = body if body is not None else {
-        "data": {"matchedUser": {"username": "u", "submitStats": {"acSubmissionNum": counts}}}}
+    m.json.return_value = (
+        body
+        if body is not None
+        else {
+            "data": {"matchedUser": {"username": "u", "submitStats": {"acSubmissionNum": counts}}}
+        }
+    )
     return m
 
 
@@ -23,8 +32,14 @@ def test_returns_three_aggregates_and_no_per_problem_rows_or_dates():
         obs, partial = fetch_leetcode_observations("testuser")
     assert partial is False
     assert {o.observation_type: o.value_num for o in obs} == {
-        "leetcode_solved_easy": 5, "leetcode_solved_medium": 4, "leetcode_solved_hard": 1}
-    assert all(o.granularity == "aggregate" and o.event_at is None and o.event_at_precision == "unknown" for o in obs)
+        "leetcode_solved_easy": 5,
+        "leetcode_solved_medium": 4,
+        "leetcode_solved_hard": 1,
+    }
+    assert all(
+        o.granularity == "aggregate" and o.event_at is None and o.event_at_precision == "unknown"
+        for o in obs
+    )
 
 
 def test_username_is_a_graphql_variable_not_interpolated():
@@ -43,21 +58,31 @@ def test_zero_solved_is_measured_zero():
 
 def test_parse_stats_missing_or_bad_count_is_malformed_not_zero():
     with pytest.raises(ProviderError) as e:
-        _parse_submission_stats([{"difficulty": "Easy", "count": 3}, {"difficulty": "Medium", "count": 1}])
+        _parse_submission_stats(
+            [{"difficulty": "Easy", "count": 3}, {"difficulty": "Medium", "count": 1}]
+        )
     assert e.value.code == "malformed"
     with pytest.raises(ProviderError):
-        _parse_submission_stats([{"difficulty": d, "count": "7"} for d in ("Easy", "Medium", "Hard")])
+        _parse_submission_stats(
+            [{"difficulty": d, "count": "7"} for d in ("Easy", "Medium", "Hard")]
+        )
 
 
-@pytest.mark.parametrize("kw,code", [
-    (dict(body={"data": {"matchedUser": None}}), "not_found"),
-    (dict(status=429), "rate_limited"),
-    (dict(status=503), "unavailable"),
-    (dict(body={"errors": [{"message": "x"}]}), "malformed"),
-    (dict(body={"data": {"matchedUser": {"submitStats": {"acSubmissionNum": []}}}}), "malformed"),
-    (dict(body={"data": {"matchedUser": {"submitStats": None}}}), "malformed"),
-    (dict(body=["unexpected"]), "malformed"),
-])
+@pytest.mark.parametrize(
+    "kw,code",
+    [
+        (dict(body={"data": {"matchedUser": None}}), "not_found"),
+        (dict(status=429), "rate_limited"),
+        (dict(status=503), "unavailable"),
+        (dict(body={"errors": [{"message": "x"}]}), "malformed"),
+        (
+            dict(body={"data": {"matchedUser": {"submitStats": {"acSubmissionNum": []}}}}),
+            "malformed",
+        ),
+        (dict(body={"data": {"matchedUser": {"submitStats": None}}}), "malformed"),
+        (dict(body=["unexpected"]), "malformed"),
+    ],
+)
 def test_failures_map_to_safe_codes(kw, code):
     with patch("requests.post", return_value=gql(**kw)):
         with pytest.raises(ProviderError) as e:

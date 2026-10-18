@@ -25,6 +25,7 @@ def test_report_is_labelled_synthetic_and_reproducible(tmp_path):
 def test_scaler_is_fit_inside_each_fold(tmp_path):
     # A feature far outside the training range must not be seen by the scaler fit on other folds.
     from ml.experiment import candidates
+
     X = pd.DataFrame(np.arange(20, dtype=float).reshape(4, 5), columns=FEATURE_COLS)
     m = candidates()["ridge"].fit(X.iloc[:3], [1, 2, 3])
     assert m[0].data_max_.max() == X.iloc[:3].to_numpy().max()

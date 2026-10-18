@@ -1,7 +1,8 @@
 """Authn/authz guards. DB-free except the owner-isolation block, which needs a DB migrated through 004."""
-import uuid
+
 import time
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -17,14 +18,35 @@ OPS = {"roles": ["pis_operator"]}
 
 # every operator-only route family; the guard runs before any handler/DB access
 OPERATOR_ROUTES = [
-    ("get", "/students"), ("get", "/students/1"), ("post", "/students"), ("patch", "/students/1"),
-    ("get", "/students/1/status"), ("get", "/students/1/history"),
-    ("post", "/ingest/coding/1"), ("post", "/ingest/github/1"), ("post", "/ingest/coding/real/1"), ("post", "/ingest/github/real/1"),
-    ("post", "/predict/1"), ("get", "/prediction/1"), ("get", "/insights/1"), ("get", "/ranking"), ("get", "/features/1"),
-    ("post", "/pipeline/1"), ("post", "/pipeline/batch"), ("post", "/admin/retrain"), ("get", "/admin/retrain/status"),
-    ("get", "/admin/audit-events"), ("get", "/admin/sync-failures"),
+    ("get", "/students"),
+    ("get", "/students/1"),
+    ("post", "/students"),
+    ("patch", "/students/1"),
+    ("get", "/students/1/status"),
+    ("get", "/students/1/history"),
+    ("post", "/ingest/coding/1"),
+    ("post", "/ingest/github/1"),
+    ("post", "/ingest/coding/real/1"),
+    ("post", "/ingest/github/real/1"),
+    ("post", "/predict/1"),
+    ("get", "/prediction/1"),
+    ("get", "/insights/1"),
+    ("get", "/ranking"),
+    ("get", "/features/1"),
+    ("post", "/pipeline/1"),
+    ("post", "/pipeline/batch"),
+    ("post", "/admin/retrain"),
+    ("get", "/admin/retrain/status"),
+    ("get", "/admin/audit-events"),
+    ("get", "/admin/sync-failures"),
 ]
-USER_ROUTES = [("get", "/me"), ("post", "/auth/logout"), ("post", "/profiles"), ("get", "/profiles/x"), ("patch", "/profiles/x")]
+USER_ROUTES = [
+    ("get", "/me"),
+    ("post", "/auth/logout"),
+    ("post", "/profiles"),
+    ("get", "/profiles/x"),
+    ("patch", "/profiles/x"),
+]
 
 
 @pytest.fixture
@@ -51,7 +73,10 @@ def test_regular_user_cannot_use_operator_routes(fake_user, method, path):
 
 def test_operator_passes_guard(fake_user, monkeypatch):
     from app.routers import students
-    monkeypatch.setattr(students, "get_connection", lambda: (_ for _ in ()).throw(RuntimeError("db")))
+
+    monkeypatch.setattr(
+        students, "get_connection", lambda: (_ for _ in ()).throw(RuntimeError("db"))
+    )
     c = TestClient(app, raise_server_exceptions=False)
     # 500 (handler reached, fake DB down), not 401/403
     assert c.get("/students", headers=bearer(make_token("ops", **OPS))).status_code == 500
@@ -62,30 +87,43 @@ def test_admin_key_header_no_longer_grants_anything(fake_user):
 
 
 def test_client_supplied_role_headers_are_ignored(fake_user):
-    r = client.get("/students", headers={**bearer(make_token("alice")), "X-Role": "pis_operator", "X-Admin": "1"})
+    r = client.get(
+        "/students",
+        headers={**bearer(make_token("alice")), "X-Role": "pis_operator", "X-Admin": "1"},
+    )
     assert r.status_code == 403
 
 
-@pytest.mark.parametrize("token", [
-    make_token("a", exp_in=-10),          # expired
-    make_token("a", key=_OTHER),          # wrong signing key
-    make_token("a", aud="someone-else"),  # wrong audience
-    "not.a.jwt",
-])
+@pytest.mark.parametrize(
+    "token",
+    [
+        make_token("a", exp_in=-10),  # expired
+        make_token("a", key=_OTHER),  # wrong signing key
+        make_token("a", aud="someone-else"),  # wrong audience
+        "not.a.jwt",
+    ],
+)
 def test_bad_tokens_rejected(fake_user, token):
     assert client.get("/me", headers=bearer(token)).status_code == 401
 
 
 def test_unsigned_alg_none_rejected(fake_user):
-    t = jwt.encode({"sub": "a", "aud": "pis-api", "iss": "https://idp.test/", "exp": 9999999999, "iat": 1}, None, algorithm="none")
+    t = jwt.encode(
+        {"sub": "a", "aud": "pis-api", "iss": "https://idp.test/", "exp": 9999999999, "iat": 1},
+        None,
+        algorithm="none",
+    )
     assert client.get("/me", headers=bearer(t)).status_code == 401
 
 
 def test_revoked_session_rejected_but_new_token_works(fake_user, monkeypatch):
     from app.routers import profiles
-    monkeypatch.setattr(profiles, "get_connection", lambda: (_ for _ in ()).throw(RuntimeError("db")))
+
+    monkeypatch.setattr(
+        profiles, "get_connection", lambda: (_ for _ in ()).throw(RuntimeError("db"))
+    )
     c = TestClient(app, raise_server_exceptions=False)
-    fake_user["valid_after"] = datetime.now(timezone.utc) - timedelta(seconds=30)
+    fake_user["valid_after"] = datetime.now(UTC) - timedelta(seconds=30)
     assert c.get("/me", headers=bearer(make_token("alice", iat_offset=-60))).status_code == 401
     assert c.get("/me", headers=bearer(make_token("alice"))).status_code == 500  # auth passed
 
@@ -107,7 +145,10 @@ def test_repeated_bad_credentials_are_throttled(fake_user):
 
 def test_expensive_operations_rate_limited(fake_user, monkeypatch):
     from app.routers import pipeline
-    monkeypatch.setattr(pipeline, "get_connection", lambda: (_ for _ in ()).throw(RuntimeError("db")))
+
+    monkeypatch.setattr(
+        pipeline, "get_connection", lambda: (_ for _ in ()).throw(RuntimeError("db"))
+    )
     c = TestClient(app, raise_server_exceptions=False)
     h = bearer(make_token("ops", **OPS))
     codes = [c.post("/pipeline/1", headers=h).status_code for _ in range(12)]
@@ -120,7 +161,11 @@ def test_oversized_body_rejected(fake_user):
 
 
 def test_batch_size_bounded(fake_user):
-    r = client.post("/pipeline/batch", json={"student_ids": list(range(1, 30))}, headers=bearer(make_token("ops", **OPS)))
+    r = client.post(
+        "/pipeline/batch",
+        json={"student_ids": list(range(1, 30))},
+        headers=bearer(make_token("ops", **OPS)),
+    )
     assert r.status_code == 422
 
 
@@ -128,6 +173,7 @@ def test_batch_size_bounded(fake_user):
 def _db_ready():
     try:
         from ingest.db_connection import get_connection
+
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute("SELECT to_regclass('public.profiles')")
             return cur.fetchone()[0] is not None
@@ -156,7 +202,10 @@ def test_profile_owner_isolation():
     assert client.get("/me", headers=a).json()["profile_id"] == pid
     # B by id: indistinguishable from nonexistent, for read and write
     assert client.get(f"/profiles/{pid}", headers=b).status_code == 404
-    assert client.patch(f"/profiles/{pid}", json={"display_name": "pwned"}, headers=b).status_code == 404
+    assert (
+        client.patch(f"/profiles/{pid}", json={"display_name": "pwned"}, headers=b).status_code
+        == 404
+    )
     assert client.get(f"/profiles/{uuid.uuid4()}", headers=b).status_code == 404
     assert client.patch(f"/profiles/{pid}", json={"cgpa": 9}, headers=a).json()["cgpa"] == 9
     assert client.get(f"/profiles/{pid}", headers=a).json()["display_name"] == "A"

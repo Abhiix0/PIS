@@ -1,9 +1,18 @@
-from fastapi     import APIRouter, Depends, HTTPException
-from app.auth    import require_operator
-from app.schemas import StudentCreate, StudentResponse, StudentListItem, StudentStatus, PredictionHistoryItem, StudentUpdate
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.auth import require_operator
+from app.schemas import (
+    PredictionHistoryItem,
+    StudentCreate,
+    StudentListItem,
+    StudentResponse,
+    StudentStatus,
+    StudentUpdate,
+)
 from ingest.db_connection import get_connection
 
 router = APIRouter(prefix="/students", tags=["Students"], dependencies=[Depends(require_operator)])
+
 
 @router.post("", response_model=StudentResponse, status_code=201)
 def create_student(body: StudentCreate):
@@ -12,15 +21,17 @@ def create_student(body: StudentCreate):
             cur.execute("SELECT id FROM students WHERE email = %s", (body.email,))
             if cur.fetchone():
                 raise HTTPException(
-                    status_code=409,
-                    detail=f"Student with email {body.email} already exists"
+                    status_code=409, detail=f"Student with email {body.email} already exists"
                 )
             d = body.model_dump()
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO students (name, email, cgpa, branch, github_username, leetcode_username)
                 VALUES (%(name)s, %(email)s, %(cgpa)s, %(branch)s, %(github_username)s, %(leetcode_username)s)
                 RETURNING id, name, email, cgpa, branch, github_username, leetcode_username, created_at
-            """, d)
+            """,
+                d,
+            )
             row = cur.fetchone()
             cols = [desc[0] for desc in cur.description]
             return dict(zip(cols, row))
@@ -69,7 +80,8 @@ def get_student_status(student_id: int):
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT s.id, s.name, s.branch, s.cgpa,
                        s.github_username, s.leetcode_username,
                        f.computed_at        AS features_computed_at,
@@ -80,7 +92,9 @@ def get_student_status(student_id: int):
                 LEFT JOIN features    f ON s.id = f.student_id
                 LEFT JOIN predictions p ON s.id = p.student_id
                 WHERE  s.id = %s
-            """, (student_id,))
+            """,
+                (student_id,),
+            )
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
@@ -103,19 +117,19 @@ def get_student_status(student_id: int):
             stage = "predicted"
 
     return {
-        "student_id":           student_id,
-        "name":                 d["name"],
-        "branch":               d["branch"],
-        "cgpa":                 float(d["cgpa"]),
-        "github_username":      d.get("github_username"),
-        "leetcode_username":    d.get("leetcode_username"),
-        "features_computed":    features_computed,
+        "student_id": student_id,
+        "name": d["name"],
+        "branch": d["branch"],
+        "cgpa": float(d["cgpa"]),
+        "github_username": d.get("github_username"),
+        "leetcode_username": d.get("leetcode_username"),
+        "features_computed": features_computed,
         "features_computed_at": d.get("features_computed_at"),
-        "prediction_exists":    prediction_exists,
-        "readiness_score":      float(d["readiness_score"]) if d.get("readiness_score") else None,
-        "category":             d.get("category"),
-        "prediction_updated":   d.get("prediction_updated"),
-        "pipeline_stage":       stage,
+        "prediction_exists": prediction_exists,
+        "readiness_score": float(d["readiness_score"]) if d.get("readiness_score") else None,
+        "category": d.get("category"),
+        "prediction_updated": d.get("prediction_updated"),
+        "pipeline_stage": stage,
     }
 
 
@@ -128,13 +142,16 @@ def get_student_history(student_id: int):
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail=f"Student {student_id} not found")
 
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT readiness_score, category, recorded_at
                 FROM   prediction_history
                 WHERE  student_id = %s
                 ORDER  BY recorded_at DESC
                 LIMIT  30
-            """, (student_id,))
+            """,
+                (student_id,),
+            )
             rows = cur.fetchall()
             cols = [desc[0] for desc in cur.description]
             return [dict(zip(cols, r)) for r in rows]

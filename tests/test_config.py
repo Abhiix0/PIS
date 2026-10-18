@@ -1,4 +1,5 @@
 """Config validation — no DB needed."""
+
 import pytest
 
 import config
@@ -23,12 +24,23 @@ def test_unknown_env_rejected(monkeypatch):
 
 @pytest.mark.parametrize("env", ["staging", "production"])
 def test_deployed_rejects_missing_auth_and_placeholder_secrets(monkeypatch, env):
-    _set(monkeypatch, APP_ENV=env, DATABASE_URL="postgresql://u:s3cr3t-real@h/db",
-         AUTH_ISSUER="", AUTH_AUDIENCE="", AUTH_JWKS_URL="")
+    _set(
+        monkeypatch,
+        APP_ENV=env,
+        DATABASE_URL="postgresql://u:s3cr3t-real@h/db",
+        AUTH_ISSUER="",
+        AUTH_AUDIENCE="",
+        AUTH_JWKS_URL="",
+    )
     errs = " ".join(config.validate())
     assert all(n in errs for n in ("AUTH_ISSUER", "AUTH_AUDIENCE", "AUTH_JWKS_URL"))
-    _set(monkeypatch, AUTH_ISSUER="https://idp.example/", AUTH_AUDIENCE="pis", AUTH_JWKS_URL="https://idp.example/jwks",
-         DATABASE_URL="postgresql://pis_user:pis_password@h/db")
+    _set(
+        monkeypatch,
+        AUTH_ISSUER="https://idp.example/",
+        AUTH_AUDIENCE="pis",
+        AUTH_JWKS_URL="https://idp.example/jwks",
+        DATABASE_URL="postgresql://pis_user:pis_password@h/db",
+    )
     assert any("DATABASE_URL" in e and "placeholder" in e for e in config.validate())
     _set(monkeypatch, DATABASE_URL="postgresql://u:s3cr3t-real@h/db")
     assert config.validate() == []

@@ -6,6 +6,7 @@
 Each file runs in its own transaction and is recorded in schema_migrations, so reruns are no-ops
 and any failure aborts with a non-zero exit instead of leaving a half-initialised database.
 """
+
 import sys
 from pathlib import Path
 
@@ -36,23 +37,31 @@ def pending(conn, directory: Path = MIGRATIONS_DIR) -> list[str]:
 
 def migrate(dsn: str, directory: Path = MIGRATIONS_DIR, seed: bool = False) -> list[str]:
     """Apply pending migrations; return the names applied. Raises on any SQL error."""
-    conn = psycopg2.connect(dsn, client_encoding="UTF8")  # files are UTF-8; Windows defaults to cp1252
+    conn = psycopg2.connect(
+        dsn, client_encoding="UTF8"
+    )  # files are UTF-8; Windows defaults to cp1252
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_advisory_lock(%s)", (_LOCK_ID,))
-            cur.execute("CREATE TABLE IF NOT EXISTS schema_migrations ("
-                        "version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())")
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations ("
+                "version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
+            )
         conn.commit()
         applied = []
         for name in pending(conn, directory):
-            with conn.cursor() as cur:  # psycopg2 opens a transaction implicitly; commit is per file
+            with (
+                conn.cursor() as cur
+            ):  # psycopg2 opens a transaction implicitly; commit is per file
                 cur.execute((directory / name).read_text(encoding="utf-8"))
                 cur.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (name,))
             conn.commit()
             applied.append(name)
         if seed:
             if not config.seed_allowed():
-                raise RuntimeError(f"Refusing to load demo seed data when APP_ENV={config.APP_ENV}.")
+                raise RuntimeError(
+                    f"Refusing to load demo seed data when APP_ENV={config.APP_ENV}."
+                )
             with conn.cursor() as cur:
                 cur.execute("SELECT COUNT(*) FROM students")
                 if cur.fetchone()[0] == 0:  # never touch a database that already has students
@@ -70,5 +79,5 @@ if __name__ == "__main__":
     errors = config.validate()
     if errors:
         sys.exit("[CONFIG ERROR] " + "\n[CONFIG ERROR] ".join(errors))
-    done = migrate(config.DATABASE_URL, seed="--seed" in sys.argv)
+    done = migrate(config.DATABASE_URL or "", seed="--seed" in sys.argv)
     print(f"Applied {len(done)} migration(s): {done}" if done else "Schema up to date.")

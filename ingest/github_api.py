@@ -3,6 +3,7 @@
 Only public data of a public username is read. Any failure raises ProviderError; nothing here ever
 turns a failed request into a count. See docs/phase6/ingestion.md for what each observation means.
 """
+
 import os
 import re
 import time
@@ -15,17 +16,21 @@ from ingest.provider import Observation, ProviderError
 
 GITHUB_API_BASE = "https://api.github.com"
 PAYLOAD_VERSION = "github-rest-v1"
-USERNAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")  # also keeps the name safe to put in a URL path
-MAX_REPOS = 10      # each repo costs one API call; unauthenticated budget is 60 requests/hour
+USERNAME_RE = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
+)  # also keeps the name safe to put in a URL path
+MAX_REPOS = 10  # each repo costs one API call; unauthenticated budget is 60 requests/hour
 _PAGE_SIZE = 100
 _MAX_PAGES = 3
-_ATTEMPTS = 3       # bounded retries, only for timeouts and 5xx
-_BACKOFF = 1.0      # seconds, doubled per attempt
+_ATTEMPTS = 3  # bounded retries, only for timeouts and 5xx
+_BACKOFF = 1.0  # seconds, doubled per attempt
 
 
 def _headers() -> dict:
     headers = {"Accept": "application/vnd.github+json"}
-    token = os.getenv("GITHUB_TOKEN", "")  # optional server-side token; never sent to or stored for clients
+    token = os.getenv(
+        "GITHUB_TOKEN", ""
+    )  # optional server-side token; never sent to or stored for clients
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
@@ -41,7 +46,7 @@ def _get(url: str, params: dict) -> requests.Response:
         except (requests.Timeout, requests.ConnectionError):
             pass
         if attempt < _ATTEMPTS - 1:
-            time.sleep(_BACKOFF * 2 ** attempt)
+            time.sleep(_BACKOFF * 2**attempt)
     raise last
 
 
@@ -54,7 +59,9 @@ def _check(resp: requests.Response, allow=(200,)) -> None:
     retry = int(retry) if isinstance(retry, str) and retry.isdigit() else None
     if s == 404:
         raise ProviderError("not_found")
-    if s == 429 or (s == 403 and (resp.headers.get("X-RateLimit-Remaining") == "0" or retry is not None)):
+    if s == 429 or (
+        s == 403 and (resp.headers.get("X-RateLimit-Remaining") == "0" or retry is not None)
+    ):
         raise ProviderError("rate_limited", retry_after=retry)
     if s in (401, 403):
         raise ProviderError("forbidden")
@@ -65,15 +72,17 @@ def _json(resp: requests.Response):
     try:
         return resp.json()
     except ValueError:
-        raise ProviderError("malformed", "response is not JSON")
+        raise ProviderError("malformed", "response is not JSON") from None
 
 
 def _list_repos(username: str) -> tuple[list[dict], bool]:
     """Public, non-fork repos, most recently pushed first. Returns (repos, truncated)."""
     repos, truncated = [], False
     for page in range(1, _MAX_PAGES + 1):
-        resp = _get(f"{GITHUB_API_BASE}/users/{username}/repos",
-                    {"per_page": _PAGE_SIZE, "page": page, "type": "owner", "sort": "pushed"})
+        resp = _get(
+            f"{GITHUB_API_BASE}/users/{username}/repos",
+            {"per_page": _PAGE_SIZE, "page": page, "type": "owner", "sort": "pushed"},
+        )
         _check(resp)
         batch = _json(resp)
         if not isinstance(batch, list) or not all(isinstance(r, dict) for r in batch):
@@ -90,7 +99,9 @@ def _list_repos(username: str) -> tuple[list[dict], bool]:
 
 def _commit_count(username: str, repo: str) -> int:
     """Commits authored by `username` in the repo, via the page count of a 1-per-page listing."""
-    resp = _get(f"{GITHUB_API_BASE}/repos/{username}/{repo}/commits", {"per_page": 1, "author": username})
+    resp = _get(
+        f"{GITHUB_API_BASE}/repos/{username}/{repo}/commits", {"per_page": 1, "author": username}
+    )
     if resp.status_code == 409:  # empty repository
         return 0
     _check(resp)
@@ -110,7 +121,7 @@ def _pushed_at(repo: dict) -> datetime | None:
     try:
         return datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
-        raise ProviderError("malformed", "pushed_at is not an ISO timestamp")
+        raise ProviderError("malformed", "pushed_at is not an ISO timestamp") from None
 
 
 def fetch_github_observations(username: str) -> tuple[list[Observation], bool]:
@@ -136,18 +147,31 @@ def fetch_github_observations(username: str) -> tuple[list[Observation], bool]:
     with ThreadPoolExecutor(max_workers=5) as ex:
         counts = list(ex.map(count, names))
     if names and all(c is None for c, _ in counts):
-        raise counts[0][1]  # nothing usable came back: fail the run rather than report an empty profile
+        raise counts[0][
+            1
+        ]  # nothing usable came back: fail the run rather than report an empty profile
 
-    obs = [Observation("github", "github_public_repo_count", len(repos), payload_version=PAYLOAD_VERSION)]
+    obs = [
+        Observation(
+            "github", "github_public_repo_count", len(repos), payload_version=PAYLOAD_VERSION
+        )
+    ]
     for repo, (n, err) in zip(repos, counts):
         if err is not None:
             partial = True
             continue
         pushed = _pushed_at(repo)
-        obs.append(Observation(
-            "github", "github_repo_commit_count", n, source_object_id=repo["name"],
-            event_at=pushed, event_at_precision="repo_push" if pushed else "unknown",
-            payload_version=PAYLOAD_VERSION))
+        obs.append(
+            Observation(
+                "github",
+                "github_repo_commit_count",
+                n,
+                source_object_id=repo["name"],
+                event_at=pushed,
+                event_at_precision="repo_push" if pushed else "unknown",
+                payload_version=PAYLOAD_VERSION,
+            )
+        )
     return obs, partial
 
 
@@ -159,7 +183,11 @@ def fetch_github_data(username: str) -> list[dict]:
     """
     obs, _ = fetch_github_observations(username)
     return [
-        {"repo_name": o.source_object_id, "commits": int(o.value_num), "commit_date": o.event_at.date()}
+        {
+            "repo_name": o.source_object_id,
+            "commits": int(o.value_num),
+            "commit_date": o.event_at.date(),
+        }
         for o in obs
         if o.observation_type == "github_repo_commit_count" and o.value_num > 0 and o.event_at
     ]

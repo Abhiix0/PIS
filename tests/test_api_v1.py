@@ -1,4 +1,5 @@
 """Contract tests for /api/v1. Need a DB migrated through 007; providers are mocked."""
+
 import uuid
 
 import pytest
@@ -41,12 +42,26 @@ def error_of(r, status, code):
     assert "detail" not in r.json()
 
 
-PROTECTED = [("get", "/me"), ("put", "/me/profile"), ("get", "/integrations"), ("put", "/integrations/github"),
-             ("delete", "/integrations/github"), ("post", "/integrations/github/sync"), ("get", "/sync-runs?provider=github"), ("get", f"/sync-runs/{uuid.uuid4()}"),
-             ("get", "/me/data-quality"), ("post", "/assessments"), ("get", "/assessments"),
-             ("get", f"/assessments/{uuid.uuid4()}"), ("get", f"/assessments/{uuid.uuid4()}/evidence"),
-             ("post", "/me/data-requests/deletion"), ("get", "/me/data-requests"), ("get", "/me/export"),
-             ("get", "/me/privacy"), ("put", "/me/privacy")]
+PROTECTED = [
+    ("get", "/me"),
+    ("put", "/me/profile"),
+    ("get", "/integrations"),
+    ("put", "/integrations/github"),
+    ("delete", "/integrations/github"),
+    ("post", "/integrations/github/sync"),
+    ("get", "/sync-runs?provider=github"),
+    ("get", f"/sync-runs/{uuid.uuid4()}"),
+    ("get", "/me/data-quality"),
+    ("post", "/assessments"),
+    ("get", "/assessments"),
+    ("get", f"/assessments/{uuid.uuid4()}"),
+    ("get", f"/assessments/{uuid.uuid4()}/evidence"),
+    ("post", "/me/data-requests/deletion"),
+    ("get", "/me/data-requests"),
+    ("get", "/me/export"),
+    ("get", "/me/privacy"),
+    ("put", "/me/privacy"),
+]
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)
@@ -55,7 +70,9 @@ def test_every_v1_route_requires_a_token(method, path):
 
 
 def test_every_v1_route_is_in_the_protected_list():
-    routes = {(m, r.path) for r in app.routes if r.path.startswith(V1) for m in r.methods - {"HEAD"}}
+    routes = {
+        (m, r.path) for r in app.routes if r.path.startswith(V1) for m in r.methods - {"HEAD"}
+    }
     assert len(routes) == len(PROTECTED)  # a new route must be added to PROTECTED
 
 
@@ -86,7 +103,11 @@ def test_legacy_routes_keep_detail_shape():
 
 
 def test_oversize_body_is_enveloped():
-    error_of(client.put(V1 + "/me/profile", content=b"x" * (config.MAX_BODY_BYTES + 1), headers=U().h), 413, "payload_too_large")
+    error_of(
+        client.put(V1 + "/me/profile", content=b"x" * (config.MAX_BODY_BYTES + 1), headers=U().h),
+        413,
+        "payload_too_large",
+    )
 
 
 def test_sync_is_accepted_then_pollable_to_completion(user):
@@ -101,6 +122,7 @@ def test_sync_is_accepted_then_pollable_to_completion(user):
 
 def test_failed_sync_run_is_explicit_and_safe(user):
     from ingest.provider import ProviderError
+
     with with_adapter(ProviderError("rate_limited", "secret-internal-detail")):
         rid = user.post("/integrations/github/sync").json()["id"]
     run = user.get(f"/sync-runs/{rid}").json()
@@ -130,7 +152,9 @@ def test_disconnect_hides_the_connection_and_is_owner_scoped(user):
 
 def test_data_quality_summarises_quarantine(user):
     obs = gh(("a", 1))
-    obs[1] = __import__("dataclasses").replace(obs[1], value_num=-5)  # fails validation: quarantined, not stored
+    obs[1] = __import__("dataclasses").replace(
+        obs[1], value_num=-5
+    )  # fails validation: quarantined, not stored
     with with_adapter(obs):
         user.post("/integrations/github/sync")
     item = user.get("/me/data-quality").json()["items"][0]
@@ -144,10 +168,17 @@ def test_assessment_is_a_non_score_evidence_snapshot(user):
     r = user.post("/assessments")
     assert r.status_code == 201
     a = r.json()
-    assert a["assessment_type"] == "insufficient_evidence" and a["readiness_score"] is None and a["model_version"] is None
+    assert (
+        a["assessment_type"] == "insufficient_evidence"
+        and a["readiness_score"] is None
+        and a["model_version"] is None
+    )
     ev = user.get(f"/assessments/{a['id']}/evidence").json()["evidence"]
     assert ev["cgpa"] == {"value": 8.1, "provenance": "user_entered"}
-    assert ev["github"]["provenance"] == "observed" and ev["github"]["values"]["commits_in_sampled_repos"] == 7
+    assert (
+        ev["github"]["provenance"] == "observed"
+        and ev["github"]["values"]["commits_in_sampled_repos"] == 7
+    )
     assert ev["github"]["sync_run_id"] and ev["leetcode"] is None
     assert user.get(f"/assessments/{a['id']}").json()["id"] == a["id"]
 
@@ -177,12 +208,17 @@ def test_assessments_and_runs_are_owner_isolated(user):
     error_of(other.get(f"/assessments/{aid}"), 404, "not_found")
     error_of(other.get(f"/assessments/{aid}/evidence"), 404, "not_found")
     error_of(other.get(f"/sync-runs/{rid}"), 404, "not_found")
-    assert other.get("/me/data-quality").json()["items"] == [] and other.get("/integrations").json()["items"] == []
+    assert (
+        other.get("/me/data-quality").json()["items"] == []
+        and other.get("/integrations").json()["items"] == []
+    )
 
 
 def test_assessment_rows_are_immutable(user):
     import psycopg2
+
     from ingest.db_connection import get_connection
+
     aid = user.post("/assessments").json()["id"]
     with pytest.raises(psycopg2.Error):
         with get_connection() as conn, conn.cursor() as cur:
@@ -191,6 +227,7 @@ def test_assessment_rows_are_immutable(user):
 
 def _count(sql, *args):
     from ingest.db_connection import get_connection
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(sql, args)
         return cur.fetchone()[0]
@@ -205,7 +242,9 @@ def test_disconnect_can_delete_imported_data_but_keeps_assessments(user):
     assert _count(q, uid) > 0
     assert user.delete("/integrations/github?delete_data=true").status_code == 204
     assert _count(q, uid) == 0
-    assert user.get(f"/assessments/{aid}/evidence").json()["evidence"]["github"] is not None  # immutable snapshot
+    assert (
+        user.get(f"/assessments/{aid}/evidence").json()["evidence"]["github"] is not None
+    )  # immutable snapshot
 
 
 def test_export_has_own_data_only_and_no_secrets(user):
@@ -216,9 +255,19 @@ def test_export_has_own_data_only_and_no_secrets(user):
     other.put("/me/profile", json={"display_name": "Other"})
     r = user.get("/me/export")
     d = r.json()
-    assert r.status_code == 200 and d["format"] == "pis-export-v1" and d["profile"]["display_name"] == "T"
-    assert d["observations"] and d["assessments"] and d["integrations"][0]["external_username"] == "octo"
-    assert "Other" not in r.text and not any(w in r.text.lower() for w in ("token", "secret", "password"))
+    assert (
+        r.status_code == 200
+        and d["format"] == "pis-export-v1"
+        and d["profile"]["display_name"] == "T"
+    )
+    assert (
+        d["observations"]
+        and d["assessments"]
+        and d["integrations"][0]["external_username"] == "octo"
+    )
+    assert "Other" not in r.text and not any(
+        w in r.text.lower() for w in ("token", "secret", "password")
+    )
 
 
 def test_deletion_requires_confirm_erases_and_locks_account(user):
@@ -256,4 +305,6 @@ def test_expired_and_revoked_tokens_are_401_with_the_envelope():
     live = bearer(make_token(sub, iat_offset=-5))
     assert client.get(f"{V1}/me", headers=live).status_code == 200
     assert client.post("/auth/logout", headers=live).status_code == 204
-    assert client.get(f"{V1}/me", headers=live).status_code == 401  # logout revokes tokens issued before it
+    assert (
+        client.get(f"{V1}/me", headers=live).status_code == 401
+    )  # logout revokes tokens issued before it

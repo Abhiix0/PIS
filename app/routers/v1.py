@@ -3,8 +3,9 @@
 Errors use the envelope {"error": {"code", "message", "request_id"}} (see app/main.py). Timestamps are ISO 8601
 with a +00:00 offset (the DB pool pins the session time zone to UTC).
 """
+
 import json
-from typing import Literal, Optional
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
@@ -16,9 +17,11 @@ from services import privacy, sync
 router = APIRouter(prefix="/api/v1")
 Provider = Literal["github", "leetcode"]
 EVIDENCE_VERSION = "evidence-v1"
-NO_SCORE_REASON = ("No readiness proxy score for real accounts: the model's inputs (per-problem solve history, "
-                   "daily commit rate) cannot be derived from provider data without inventing values. "
-                   "This is an evidence summary only.")
+NO_SCORE_REASON = (
+    "No readiness proxy score for real accounts: the model's inputs (per-problem solve history, "
+    "daily commit rate) cannot be derived from provider data without inventing values. "
+    "This is an evidence summary only."
+)
 _MY_PROFILE = "SELECT id FROM profiles WHERE user_id = %s"
 
 
@@ -41,10 +44,10 @@ def _refused(e: sync.SyncRefused):
 
 # ── Profile ────────────────────────────────────────────────────────────
 class ProfileIn(BaseModel):
-    display_name:    str = Field(..., min_length=1, max_length=100)
-    branch:          Optional[str] = Field(None, max_length=50)
-    graduation_year: Optional[int] = Field(None, ge=2000, le=2100)
-    cgpa:            Optional[float] = Field(None, ge=0, le=10)
+    display_name: str = Field(..., min_length=1, max_length=100)
+    branch: str | None = Field(None, max_length=50)
+    graduation_year: int | None = Field(None, ge=2000, le=2100)
+    cgpa: float | None = Field(None, ge=0, le=10)
 
 
 _PROFILE = "id::text AS id, display_name, branch, graduation_year, cgpa::float AS cgpa, created_at, updated_at"
@@ -55,7 +58,11 @@ def me(p: Principal = Depends(current_principal)):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT {_PROFILE} FROM profiles WHERE user_id = %s", (p.user_id,))
         rows = _dicts(cur)
-    return {"user_id": p.user_id, "is_operator": p.is_operator, "profile": rows[0] if rows else None}
+    return {
+        "user_id": p.user_id,
+        "is_operator": p.is_operator,
+        "profile": rows[0] if rows else None,
+    }
 
 
 @router.put("/me/profile", tags=["Profile"])
@@ -67,7 +74,8 @@ def put_profile(body: ProfileIn, response: Response, p: Principal = Depends(curr
             "VALUES (%s, 'real', %s, %s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET display_name = EXCLUDED.display_name, "
             "branch = EXCLUDED.branch, graduation_year = EXCLUDED.graduation_year, cgpa = EXCLUDED.cgpa, updated_at = now() "
             f"RETURNING {_PROFILE}, (xmax = 0) AS inserted",
-            (p.user_id, body.display_name, body.branch, body.graduation_year, body.cgpa))
+            (p.user_id, body.display_name, body.branch, body.graduation_year, body.cgpa),
+        )
         row = _dicts(cur)[0]
     response.status_code = 201 if row.pop("inserted") else 200
     return row
@@ -75,7 +83,9 @@ def put_profile(body: ProfileIn, response: Response, p: Principal = Depends(curr
 
 # ── Integrations and sync ──────────────────────────────────────────────
 class ConnectIn(BaseModel):
-    username: str = Field(..., min_length=1, max_length=64)  # public username only; no tokens are accepted
+    username: str = Field(
+        ..., min_length=1, max_length=64
+    )  # public username only; no tokens are accepted
 
 
 @router.get("/integrations", tags=["Integrations"])
@@ -92,7 +102,9 @@ def connect(provider: Provider, body: ConnectIn, p: Principal = Depends(current_
 
 
 @router.delete("/integrations/{provider}", status_code=204, tags=["Integrations"])
-def disconnect(provider: Provider, delete_data: bool = Query(False), p: Principal = Depends(current_principal)):
+def disconnect(
+    provider: Provider, delete_data: bool = Query(False), p: Principal = Depends(current_principal)
+):
     """Stops syncing. `delete_data=true` also erases imported observations for this provider; past assessment
     snapshots keep the values they were built from (they are immutable)."""
     try:
@@ -101,8 +113,18 @@ def disconnect(provider: Provider, delete_data: bool = Query(False), p: Principa
         _refused(e)
 
 
-@router.post("/integrations/{provider}/sync", status_code=202, tags=["Sync"], dependencies=[Depends(expensive)])
-def start_sync(provider: Provider, tasks: BackgroundTasks, response: Response, p: Principal = Depends(current_principal)):
+@router.post(
+    "/integrations/{provider}/sync",
+    status_code=202,
+    tags=["Sync"],
+    dependencies=[Depends(expensive)],
+)
+def start_sync(
+    provider: Provider,
+    tasks: BackgroundTasks,
+    response: Response,
+    p: Principal = Depends(current_principal),
+):
     """Starts a sync and returns at once with a run id; poll GET /sync-runs/{id} until status != 'running'.
 
     Retry semantics: a repeat while a run is in flight is 409 and within the cooldown 429 + Retry-After, so a
@@ -118,7 +140,11 @@ def start_sync(provider: Provider, tasks: BackgroundTasks, response: Response, p
 
 
 @router.get("/sync-runs", tags=["Sync"])
-def list_sync_runs(provider: Provider, limit: int = Query(10, ge=1, le=50), p: Principal = Depends(current_principal)):
+def list_sync_runs(
+    provider: Provider,
+    limit: int = Query(10, ge=1, le=50),
+    p: Principal = Depends(current_principal),
+):
     return {"items": sync.list_runs(p.user_id, provider, limit)}
 
 
@@ -127,14 +153,15 @@ def get_sync_run(run_id: str, p: Principal = Depends(current_principal)):
     try:
         return sync.get_run(p.user_id, run_id)
     except IndexError:
-        raise HTTPException(status_code=404, detail="Sync run not found")
+        raise HTTPException(status_code=404, detail="Sync run not found") from None
 
 
 @router.get("/me/data-quality", tags=["Data quality"])
 def data_quality(p: Principal = Depends(current_principal)):
     """Per connected provider: last run outcome plus how many records were quarantined, by rule code."""
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("""
+        cur.execute(
+            """
             SELECT c.provider, c.external_username, c.status AS connection_status, c.last_success_at,
                    (SELECT row_to_json(x) FROM (SELECT r.id::text AS id, r.status, r.completed_at, r.safe_error_code,
                            r.records_created, r.records_rejected FROM sync_runs r WHERE r.connection_id = c.id
@@ -144,44 +171,63 @@ def data_quality(p: Principal = Depends(current_principal)):
                            WHERE r.connection_id = c.id AND d.outcome = 'rejected' GROUP BY d.rule_code) q), '{}'::json)
                            AS rejected_by_rule
             FROM integration_connections c WHERE c.user_id = %s AND c.status <> 'disconnected' ORDER BY c.provider
-        """, (p.user_id,))
+        """,
+            (p.user_id,),
+        )
         return {"items": _dicts(cur)}
 
 
 # ── Assessments ────────────────────────────────────────────────────────
 def _build_evidence(cur, profile_id: str, cgpa) -> dict:
     """Latest run's observations per provider, with provenance and the run id they came from."""
-    ev = {"evidence_version": EVIDENCE_VERSION,
-          "cgpa": None if cgpa is None else {"value": float(cgpa), "provenance": "user_entered"}}
+    ev = {
+        "evidence_version": EVIDENCE_VERSION,
+        "cgpa": None if cgpa is None else {"value": float(cgpa), "provenance": "user_entered"},
+    }
     for provider in ("github", "leetcode"):
-        cur.execute("""
+        cur.execute(
+            """
             SELECT o.observation_type, o.value_num::float, o.provenance::text, o.sync_run_id::text, r.completed_at
             FROM source_observations o JOIN sync_runs r ON r.id = o.sync_run_id
             WHERE o.profile_id = %s AND o.provider = %s AND o.sync_run_id = (
                 SELECT sync_run_id FROM source_observations WHERE profile_id = %s AND provider = %s
                 ORDER BY collected_at DESC LIMIT 1)
-        """, (profile_id, provider, profile_id, provider))
+        """,
+            (profile_id, provider, profile_id, provider),
+        )
         rows = cur.fetchall()
         if not rows:
             ev[provider] = None
             continue
-        values = {}
+        values: dict[str, Any] = {}
         for typ, num, _, _, _ in rows:
-            if typ == "github_repo_commit_count":  # per-repo rows: report the sum and how many repos fed it
-                values["commits_in_sampled_repos"] = values.get("commits_in_sampled_repos", 0) + (num or 0)
+            if (
+                typ == "github_repo_commit_count"
+            ):  # per-repo rows: report the sum and how many repos fed it
+                values["commits_in_sampled_repos"] = values.get("commits_in_sampled_repos", 0) + (
+                    num or 0
+                )
                 values["repos_sampled"] = values.get("repos_sampled", 0) + 1
             else:
                 values[typ] = num
-        ev[provider] = {"sync_run_id": rows[0][3], "synced_at": rows[0][4].isoformat(),
-                        "provenance": rows[0][2], "values": values}
+        ev[provider] = {
+            "sync_run_id": rows[0][3],
+            "synced_at": rows[0][4].isoformat(),
+            "provenance": rows[0][2],
+            "values": values,
+        }
     return ev
 
 
-_ASSESSMENT = ("id::text AS id, assessment_type, readiness_score::float AS readiness_score, category, reason, "
-               "model_version, created_at")
+_ASSESSMENT = (
+    "id::text AS id, assessment_type, readiness_score::float AS readiness_score, category, reason, "
+    "model_version, created_at"
+)
 
 
-@router.post("/assessments", status_code=201, tags=["Assessments"], dependencies=[Depends(expensive)])
+@router.post(
+    "/assessments", status_code=201, tags=["Assessments"], dependencies=[Depends(expensive)]
+)
 def create_assessment(p: Principal = Depends(current_principal)):
     """Snapshot the caller's current evidence. Real accounts get an evidence summary and a non-score result
     (`insufficient_evidence`) until a validated real-user feature pipeline exists; no number is invented."""
@@ -191,36 +237,52 @@ def create_assessment(p: Principal = Depends(current_principal)):
         if not prof:
             raise HTTPException(status_code=409, detail="Create a profile first.")
         ev = _build_evidence(cur, prof[0], prof[1])
-        reason = NO_SCORE_REASON if (ev["github"] or ev["leetcode"]) else \
-            "No synced provider data yet. Connect an account and run a sync."
-        cur.execute(f"INSERT INTO assessments (profile_id, assessment_type, reason, evidence) "
-                    f"VALUES (%s, 'insufficient_evidence', %s, %s::jsonb) RETURNING {_ASSESSMENT}",
-                    (prof[0], reason, json.dumps(ev)))
+        reason = (
+            NO_SCORE_REASON
+            if (ev["github"] or ev["leetcode"])
+            else "No synced provider data yet. Connect an account and run a sync."
+        )
+        cur.execute(
+            f"INSERT INTO assessments (profile_id, assessment_type, reason, evidence) "
+            f"VALUES (%s, 'insufficient_evidence', %s, %s::jsonb) RETURNING {_ASSESSMENT}",
+            (prof[0], reason, json.dumps(ev)),
+        )
         return _dicts(cur)[0]
 
 
 @router.get("/assessments", tags=["Assessments"])
-def list_assessments(limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=100_000),
-                     p: Principal = Depends(current_principal)):
+def list_assessments(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=100_000),
+    p: Principal = Depends(current_principal),
+):
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT {_ASSESSMENT} FROM assessments WHERE profile_id IN ({_MY_PROFILE}) "
-                    "ORDER BY created_at DESC, id LIMIT %s OFFSET %s", (p.user_id, limit, offset))
+        cur.execute(
+            f"SELECT {_ASSESSMENT} FROM assessments WHERE profile_id IN ({_MY_PROFILE}) "
+            "ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
+            (p.user_id, limit, offset),
+        )
         return {"items": _dicts(cur), "limit": limit, "offset": offset}
 
 
 @router.get("/assessments/{assessment_id}", tags=["Assessments"])
 def get_assessment(assessment_id: str, p: Principal = Depends(current_principal)):
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT {_ASSESSMENT} FROM assessments WHERE id::text = %s AND profile_id IN ({_MY_PROFILE})",
-                    (assessment_id, p.user_id))
+        cur.execute(
+            f"SELECT {_ASSESSMENT} FROM assessments WHERE id::text = %s AND profile_id IN ({_MY_PROFILE})",
+            (assessment_id, p.user_id),
+        )
         return _one(cur, "Assessment")
 
 
 @router.get("/assessments/{assessment_id}/evidence", tags=["Assessments"])
 def get_assessment_evidence(assessment_id: str, p: Principal = Depends(current_principal)):
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id::text AS assessment_id, evidence FROM assessments "
-                    f"WHERE id::text = %s AND profile_id IN ({_MY_PROFILE})", (assessment_id, p.user_id))
+        cur.execute(
+            "SELECT id::text AS assessment_id, evidence FROM assessments "
+            f"WHERE id::text = %s AND profile_id IN ({_MY_PROFILE})",
+            (assessment_id, p.user_id),
+        )
         return _one(cur, "Assessment")
 
 
@@ -236,15 +298,20 @@ def request_deletion(confirm: bool = Query(False), p: Principal = Depends(curren
     """Irreversibly erases profile, connections, observations and assessments, and locks the account (later
     requests with old or new tokens get 403). `confirm=true` is required."""
     if not confirm:
-        raise HTTPException(status_code=400, detail="Pass confirm=true to permanently delete your data.")
+        raise HTTPException(
+            status_code=400, detail="Pass confirm=true to permanently delete your data."
+        )
     return privacy.delete_account(p.user_id)
 
 
 @router.get("/me/data-requests", tags=["Privacy"])
 def list_data_requests(p: Principal = Depends(current_principal)):
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id::text AS id, kind, status, requested_at, updated_at FROM data_requests "
-                    "WHERE user_id = %s ORDER BY requested_at DESC LIMIT 50", (p.user_id,))
+        cur.execute(
+            "SELECT id::text AS id, kind, status, requested_at, updated_at FROM data_requests "
+            "WHERE user_id = %s ORDER BY requested_at DESC LIMIT 50",
+            (p.user_id,),
+        )
         return {"items": _dicts(cur)}
 
 
@@ -265,8 +332,15 @@ def get_privacy(p: Principal = Depends(current_principal)):
 def put_privacy(body: ConsentIn, p: Principal = Depends(current_principal)):
     """Grant or revoke optional research/training use. Recorded only: no such use exists yet."""
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("UPDATE users SET research_consent_at = CASE WHEN %s THEN COALESCE(research_consent_at, now()) END "
-                    "WHERE id = %s RETURNING research_consent_at", (body.research, p.user_id))
+        cur.execute(
+            "UPDATE users SET research_consent_at = CASE WHEN %s THEN COALESCE(research_consent_at, now()) END "
+            "WHERE id = %s RETURNING research_consent_at",
+            (body.research, p.user_id),
+        )
         at = cur.fetchone()[0]
-        privacy.audit(cur, "consent.research_granted" if body.research else "consent.research_revoked", p.user_id)
+        privacy.audit(
+            cur,
+            "consent.research_granted" if body.research else "consent.research_revoked",
+            p.user_id,
+        )
     return {"research_consent": at is not None, "research_consent_at": at}

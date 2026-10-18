@@ -1,6 +1,23 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
-.env
+.env*
+!.env.example
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .DS_Store
+node_modules/
+dist/
+target/
+coverage/
+# generated at boot (entrypoint.sh) or by ml.train / features.compute
+models/*.pkl
+models/*.json
+models/staging/
+models/bundles/
+features/*.csv
+# experiments: keep only the baseline report linked from docs/research/baseline-report.md
+experiments/*
+!experiments/baseline-synthetic-a7d069146a57.json

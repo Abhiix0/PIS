@@ -1,11 +1,17 @@
-import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import requests as req_lib
+import streamlit as st
 from api_client import (
-    health_check, get_students, create_student, run_pipeline,
-    get_insights, get_ranking, get_student_status, get_features,
+    create_student,
+    get_features,
+    get_insights,
+    get_ranking,
     get_student_history,
+    get_student_status,
+    get_students,
+    health_check,
+    run_pipeline,
 )
 
 # ── Page config ───────────────────────────────────────────────────────
@@ -17,7 +23,8 @@ st.set_page_config(
 )
 
 # ── Global CSS ────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* ════════════════════════════════════════════════
    PIS DARK THEME — Design System
@@ -242,7 +249,9 @@ hr { border-color: #1F2937 !important; margin: 20px 0 !important; }
 /* ── Spacing ── */
 [data-testid="stVerticalBlock"] > div { margin-bottom: 4px; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -250,7 +259,7 @@ def card(content_fn, accent=False):
     cls = "pis-card-accent" if accent else "pis-card"
     st.markdown(f'<div class="{cls}">', unsafe_allow_html=True)
     content_fn()
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def section_title(text: str):
@@ -258,44 +267,63 @@ def section_title(text: str):
 
 
 def render_radar_chart(features: dict, student_name: str, cgpa: float = 0.0):
-    MAX_PROBLEMS = 200; MAX_DIFFICULTY = 3.0; MAX_CONSISTENCY = 1.0
-    MAX_COMMIT_FREQ = 0.8; MAX_CGPA = 10.0
+    MAX_PROBLEMS = 200
+    MAX_DIFFICULTY = 3.0
+    MAX_CONSISTENCY = 1.0
+    MAX_COMMIT_FREQ = 0.8
+    MAX_CGPA = 10.0
 
-    raw_problems    = features.get("total_problems", 0)
-    raw_difficulty  = features.get("avg_difficulty", 0)
+    raw_problems = features.get("total_problems", 0)
+    raw_difficulty = features.get("avg_difficulty", 0)
     raw_consistency = features.get("consistency_score", 0)
     raw_commit_freq = features.get("commit_frequency", 0)
-    raw_cgpa        = cgpa
+    raw_cgpa = cgpa
 
     values = [
-        min(raw_problems    / MAX_PROBLEMS,    1.0),
-        min(raw_difficulty  / MAX_DIFFICULTY,  1.0),
+        min(raw_problems / MAX_PROBLEMS, 1.0),
+        min(raw_difficulty / MAX_DIFFICULTY, 1.0),
         min(raw_consistency / MAX_CONSISTENCY, 1.0),
         min(raw_commit_freq / MAX_COMMIT_FREQ, 1.0),
-        min(raw_cgpa        / MAX_CGPA,        1.0),
+        min(raw_cgpa / MAX_CGPA, 1.0),
     ]
     labels = ["DSA Volume", "Problem Depth", "Consistency", "GitHub Activity", "CGPA"]
     values_closed = values + [values[0]]
     labels_closed = labels + [labels[0]]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=values_closed, theta=labels_closed, fill="toself",
-        fillcolor="rgba(34,197,94,0.15)", line=dict(color="#22C55E", width=2.5),
-        name=student_name,
-    ))
+    fig.add_trace(
+        go.Scatterpolar(
+            r=values_closed,
+            theta=labels_closed,
+            fill="toself",
+            fillcolor="rgba(34,197,94,0.15)",
+            line=dict(color="#22C55E", width=2.5),
+            name=student_name,
+        )
+    )
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(visible=True, range=[0,1],
-                tickvals=[0.25,0.5,0.75,1.0], ticktext=["25%","50%","75%","100%"],
-                gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=10, color="#6B7280"),
-                linecolor="rgba(255,255,255,0.06)"),
-            angularaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=11, color="#9CA3AF"),
-                linecolor="rgba(255,255,255,0.06)"),
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1],
+                tickvals=[0.25, 0.5, 0.75, 1.0],
+                ticktext=["25%", "50%", "75%", "100%"],
+                gridcolor="rgba(255,255,255,0.06)",
+                tickfont=dict(size=10, color="#6B7280"),
+                linecolor="rgba(255,255,255,0.06)",
+            ),
+            angularaxis=dict(
+                gridcolor="rgba(255,255,255,0.06)",
+                tickfont=dict(size=11, color="#9CA3AF"),
+                linecolor="rgba(255,255,255,0.06)",
+            ),
             bgcolor="rgba(0,0,0,0)",
         ),
-        showlegend=False, margin=dict(l=30,r=30,t=20,b=20), height=300,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+        margin=dict(l=30, r=30, t=20, b=20),
+        height=300,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
@@ -306,16 +334,18 @@ def render_radar_chart(features: dict, student_name: str, cgpa: float = 0.0):
 
 def render_insight(result: dict, show_pipeline_steps: bool = False):
     """Used by Onboard page after pipeline run."""
-    score    = result.get("readiness_score") or 0
+    score = result.get("readiness_score") or 0
     category = result.get("category", "Unknown")
-    trend    = result.get("score_trend")
-    delta    = result.get("score_delta_7d")
-    stale    = result.get("features_stale", False)
+    trend = result.get("score_trend")
+    delta = result.get("score_delta_7d")
+    stale = result.get("features_stale", False)
 
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         delta_str = f" ({delta:+.1f} vs 7d ago)" if delta is not None else ""
-        st.metric("Readiness Score", f"{score:.1f}/100", delta=f"{trend}{delta_str}" if trend else None)
+        st.metric(
+            "Readiness Score", f"{score:.1f}/100", delta=f"{trend}{delta_str}" if trend else None
+        )
     with col2:
         badge = "🟢" if category == "Ready" else "🟡" if category == "Near Ready" else "🔴"
         st.metric("Category", f"{badge} {category}")
@@ -340,13 +370,13 @@ def render_insight(result: dict, show_pipeline_steps: bool = False):
                 st.markdown("  ".join(f"`{c}`" for c in company_tier["examples"]))
 
     if stale:
-        st.warning(f"⚠️ Features were computed {result.get('features_age_hours',0):.0f}h ago.")
+        st.warning(f"⚠️ Features were computed {result.get('features_age_hours', 0):.0f}h ago.")
 
     composites = result.get("composite_insights", [])
     if composites:
         st.subheader("Pattern Insights")
         for c in composites:
-            with st.expander(f"🔍 {c['pattern'].replace('_',' ').title()}"):
+            with st.expander(f"🔍 {c['pattern'].replace('_', ' ').title()}"):
                 st.write(c["message"])
                 st.info(f"**Action:** {c['action']}")
 
@@ -362,8 +392,12 @@ def render_insight(result: dict, show_pipeline_steps: bool = False):
     if recommendations:
         st.subheader("Recommendations")
         for rec in recommendations:
-            tier_icon = "🔴" if rec["tier"] == "critical" else "🟡" if rec["tier"] == "important" else "🔵"
-            with st.expander(f"{tier_icon} #{rec['priority']} [{rec['tier'].upper()}] {rec['area'].replace('_',' ').title()}"):
+            tier_icon = (
+                "🔴" if rec["tier"] == "critical" else "🟡" if rec["tier"] == "important" else "🔵"
+            )
+            with st.expander(
+                f"{tier_icon} #{rec['priority']} [{rec['tier'].upper()}] {rec['area'].replace('_', ' ').title()}"
+            ):
                 st.write(rec["action"])
                 st.caption(rec["why_it_matters"])
 
@@ -372,11 +406,13 @@ def render_insight(result: dict, show_pipeline_steps: bool = False):
         if steps:
             with st.expander("Pipeline execution details"):
                 for step in steps:
-                    icon   = "✅" if step["status"] == "success" else "❌"
-                    source = f" ({step.get('data_source','')})" if step.get("data_source") else ""
-                    err    = f" — {step['error']}" if step.get("error") else ""
+                    icon = "✅" if step["status"] == "success" else "❌"
+                    source = f" ({step.get('data_source', '')})" if step.get("data_source") else ""
+                    err = f" — {step['error']}" if step.get("error") else ""
                     st.text(f"{icon} {step['step']}{source} — {step['duration_ms']}ms{err}")
-                st.caption(f"Total: {result.get('total_duration_ms',0)}ms  |  ran_at: {result.get('ran_at','')}")
+                st.caption(
+                    f"Total: {result.get('total_duration_ms', 0)}ms  |  ran_at: {result.get('ran_at', '')}"
+                )
 
 
 @st.cache_data(ttl=30)
@@ -392,7 +428,8 @@ if "entered" not in st.session_state:
 # LANDING PAGE
 # ═══════════════════════════════════════════════════════════════════════
 if not st.session_state.entered:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="hero-wrap">
         <div class="hero-title">Placement Intelligence<br>System</div>
         <div class="hero-sub">Analyze. Predict. Dominate your placements.</div>
@@ -404,7 +441,9 @@ if not st.session_state.entered:
             <span class="hero-pill">🎯 Placement Readiness Score</span>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     col_l, col_c, col_r = st.columns([2, 1, 2])
     with col_c:
@@ -428,7 +467,7 @@ with st.sidebar:
     st.divider()
     try:
         health = _cached_health()
-        st.success(f"API Online v{health.get('version','?')}")
+        st.success(f"API Online v{health.get('version', '?')}")
     except Exception:
         st.error("API Offline — start FastAPI server")
 
@@ -437,22 +476,34 @@ with st.sidebar:
 # PAGE 1: ONBOARD A STUDENT
 # ═══════════════════════════════════════════════════════════════════════
 if page == "Onboard Student":
-    st.markdown('<h2 style="color:#F9FAFB;margin-bottom:4px">Onboard a New Student</h2>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#9CA3AF;margin-bottom:24px">Add platform usernames for real data. Leave blank for synthetic.</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<h2 style="color:#F9FAFB;margin-bottom:4px">Onboard a New Student</h2>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p style="color:#9CA3AF;margin-bottom:24px">Add platform usernames for real data. Leave blank for synthetic.</p>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown('<div class="pis-card">', unsafe_allow_html=True)
     with st.form("student_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            name   = st.text_input("Full Name *", placeholder="Aryan Mehta")
-            email  = st.text_input("Email *", placeholder="aryan@example.com")
+            name = st.text_input("Full Name *", placeholder="Aryan Mehta")
+            email = st.text_input("Email *", placeholder="aryan@example.com")
             branch = st.selectbox("Branch *", ["CSE", "IT", "ECE", "MECH", "EEE", "OTHER"])
         with col2:
-            cgpa              = st.slider("CGPA *", 0.0, 10.0, 7.5, step=0.1)
-            github_username   = st.text_input("GitHub Username", placeholder="e.g. octocat (optional)")
-            leetcode_username = st.text_input("LeetCode Username", placeholder="e.g. neal_wu (optional)")
-        submitted = st.form_submit_button("🚀 Create Student & Run Analysis", type="primary", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+            cgpa = st.slider("CGPA *", 0.0, 10.0, 7.5, step=0.1)
+            github_username = st.text_input(
+                "GitHub Username", placeholder="e.g. octocat (optional)"
+            )
+            leetcode_username = st.text_input(
+                "LeetCode Username", placeholder="e.g. neal_wu (optional)"
+            )
+        submitted = st.form_submit_button(
+            "🚀 Create Student & Run Analysis", type="primary", use_container_width=True
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if submitted:
         if not name or not email:
@@ -462,11 +513,14 @@ if page == "Onboard Student":
             with st.status("Creating student profile...", expanded=True) as status:
                 try:
                     payload = {
-                        "name": name, "email": email, "cgpa": cgpa, "branch": branch,
+                        "name": name,
+                        "email": email,
+                        "cgpa": cgpa,
+                        "branch": branch,
                         "github_username": github_username or None,
                         "leetcode_username": leetcode_username or None,
                     }
-                    student    = create_student(payload)
+                    student = create_student(payload)
                     student_id = student["id"]
                     st.write(f"✅ Student created (ID: {student_id})")
                     status.update(label="Running placement analysis pipeline...")
@@ -494,7 +548,6 @@ if page == "Onboard Student":
 # PAGE 2: STUDENT DASHBOARD
 # ═══════════════════════════════════════════════════════════════════════
 elif page == "Student Dashboard":
-
     try:
         students = get_students()
     except Exception as e:
@@ -507,11 +560,11 @@ elif page == "Student Dashboard":
 
     # ── Student selector ───────────────────────────────────────────────
     student_options = {
-        f"{s['name']} ({s['branch']}) — {s.get('category','No prediction')}": s["id"]
+        f"{s['name']} ({s['branch']}) — {s.get('category', 'No prediction')}": s["id"]
         for s in students
     }
-    selected_label   = st.selectbox("Select Student", list(student_options.keys()))
-    selected_id      = student_options[selected_label]
+    selected_label = st.selectbox("Select Student", list(student_options.keys()))
+    selected_id = student_options[selected_label]
     selected_student = next((s for s in students if s["id"] == selected_id), {})
 
     # ── Action buttons ─────────────────────────────────────────────────
@@ -554,9 +607,12 @@ elif page == "Student Dashboard":
             )
         with edit_col3:
             new_cgpa = st.number_input(
-                "CGPA", 0.0, 10.0,
+                "CGPA",
+                0.0,
+                10.0,
                 value=float(selected_student.get("cgpa", 7.5)),
-                step=0.1, key="edit_cgpa",
+                step=0.1,
+                key="edit_cgpa",
             )
         if st.button("Save Changes", key="save_profile") and update_student:
             payload = {}
@@ -580,26 +636,29 @@ elif page == "Student Dashboard":
         st.stop()
 
     student_name = insight.get("student_name", selected_student.get("name", ""))
-    branch       = selected_student.get("branch", "")
-    score        = insight.get("readiness_score") or 0
-    category     = insight.get("category", "Unknown")
-    trend        = insight.get("score_trend")
-    delta        = insight.get("score_delta_7d")
-    stale        = insight.get("features_stale", False)
-    top          = insight.get("top_priority", "")
+    branch = selected_student.get("branch", "")
+    score = insight.get("readiness_score") or 0
+    category = insight.get("category", "Unknown")
+    trend = insight.get("score_trend")
+    delta = insight.get("score_delta_7d")
+    stale = insight.get("features_stale", False)
+    top = insight.get("top_priority", "")
 
     try:
-        status_data     = get_student_status(selected_id)
-        github_synced   = status_data.get("github_username") is not None
+        status_data = get_student_status(selected_id)
+        github_synced = status_data.get("github_username") is not None
         leetcode_synced = status_data.get("leetcode_username") is not None
-        data_badge      = "📡 Real Data" if (github_synced or leetcode_synced) else "🔄 Synthetic"
-        stage           = status_data.get("pipeline_stage", "unknown")
-        stage_icon      = {"complete":"🟢","features_computed":"🟠","no_data":"🔴"}.get(stage,"⚪")
+        data_badge = "📡 Real Data" if (github_synced or leetcode_synced) else "🔄 Synthetic"
+        stage = status_data.get("pipeline_stage", "unknown")
+        stage_icon = {"complete": "🟢", "features_computed": "🟠", "no_data": "🔴"}.get(stage, "⚪")
     except Exception:
-        data_badge = ""; stage_icon = "⚪"; stage = "unknown"
+        data_badge = ""
+        stage_icon = "⚪"
+        stage = "unknown"
 
     # ── HEADER BANNER ─────────────────────────────────────────────────
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div class="pis-card-accent" style="margin-bottom:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div>
@@ -610,15 +669,29 @@ elif page == "Student Dashboard":
             <div style="font-size:0.9rem;color:#9CA3AF">{stage_icon} Pipeline: <strong style="color:#E5E7EB">{stage}</strong></div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     if stale:
-        st.warning(f"⚠️ Features are {insight.get('features_age_hours',0):.0f}h old — run pipeline for fresh analysis.")
+        st.warning(
+            f"⚠️ Features are {insight.get('features_age_hours', 0):.0f}h old — run pipeline for fresh analysis."
+        )
 
     # ── HERO SCORE SECTION ─────────────────────────────────────────────
-    badge_cls = "badge-ready" if category == "Ready" else "badge-near" if category == "Near Ready" else "badge-needs"
+    badge_cls = (
+        "badge-ready"
+        if category == "Ready"
+        else "badge-near"
+        if category == "Near Ready"
+        else "badge-needs"
+    )
     badge_txt = category
-    delta_html = f'<div style="font-size:0.85rem;color:#9CA3AF;margin-top:6px">{trend} &nbsp; {delta:+.1f} pts vs 7d ago</div>' if (trend and delta is not None) else ""
+    delta_html = (
+        f'<div style="font-size:0.85rem;color:#9CA3AF;margin-top:6px">{trend} &nbsp; {delta:+.1f} pts vs 7d ago</div>'
+        if (trend and delta is not None)
+        else ""
+    )
 
     top_html = ""
     if top and top != "No critical gaps detected.":
@@ -628,26 +701,35 @@ elif page == "Student Dashboard":
 
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div class="pis-card" style="text-align:center;padding:28px 16px">
             <div class="score-label">Readiness Score</div>
             <div class="score-number">{score:.1f}</div>
             <div class="score-label">/ 100</div>
             {delta_html}
-        </div>""", unsafe_allow_html=True)
+        </div>""",
+            unsafe_allow_html=True,
+        )
     with sc2:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div class="pis-card" style="text-align:center;padding:28px 16px">
             <div class="score-label">Category</div>
-            <div style="font-size:2rem;margin:8px 0">{"🟢" if category=="Ready" else "🟡" if category=="Near Ready" else "🔴"}</div>
+            <div style="font-size:2rem;margin:8px 0">{"🟢" if category == "Ready" else "🟡" if category == "Near Ready" else "🔴"}</div>
             <span class="category-badge {badge_cls}">{badge_txt}</span>
-        </div>""", unsafe_allow_html=True)
+        </div>""",
+            unsafe_allow_html=True,
+        )
     with sc3:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div class="pis-card" style="padding:20px">
             <div class="score-label" style="margin-bottom:10px">Your Next Move</div>
             {top_html}
-        </div>""", unsafe_allow_html=True)
+        </div>""",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
@@ -657,8 +739,10 @@ elif page == "Student Dashboard":
         if features:
             st.markdown('<div class="pis-card">', unsafe_allow_html=True)
             section_title("🕸️ Skill Profile")
-            render_radar_chart(features, student_name, cgpa=float(selected_student.get("cgpa") or 0))
-            st.markdown('</div>', unsafe_allow_html=True)
+            render_radar_chart(
+                features, student_name, cgpa=float(selected_student.get("cgpa") or 0)
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
     except Exception:
         pass
 
@@ -668,10 +752,10 @@ elif page == "Student Dashboard":
         st.markdown('<div class="pis-card">', unsafe_allow_html=True)
         section_title("🔍 Pattern Insights")
         for c in composites:
-            with st.expander(f"🔍 {c['pattern'].replace('_',' ').title()}"):
+            with st.expander(f"🔍 {c['pattern'].replace('_', ' ').title()}"):
                 st.write(c["message"])
                 st.info(f"**Action:** {c['action']}")
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # ── RECOMMENDATIONS ────────────────────────────────────────────────
     recommendations = insight.get("recommendations", [])
@@ -679,19 +763,22 @@ elif page == "Student Dashboard":
         st.markdown('<div class="pis-card">', unsafe_allow_html=True)
         section_title("🛠️ What to Fix")
         for rec in recommendations:
-            tier      = rec["tier"]
+            tier = rec["tier"]
             tier_icon = "🔴" if tier == "critical" else "🟡" if tier == "important" else "🔵"
-            cls       = f"rec-block rec-block-{tier}"
-            area      = rec["area"].replace("_"," ").title()
-            st.markdown(f"""
+            cls = f"rec-block rec-block-{tier}"
+            area = rec["area"].replace("_", " ").title()
+            st.markdown(
+                f"""
             <div class="{cls}">
                 <div style="font-weight:700;font-size:0.95rem;margin-bottom:4px">
-                    {tier_icon} #{rec['priority']} &nbsp;<span style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.7">[{tier}]</span> &nbsp;{area}
+                    {tier_icon} #{rec["priority"]} &nbsp;<span style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.7">[{tier}]</span> &nbsp;{area}
                 </div>
-                <div style="font-size:0.9rem;color:#D1D5DB;margin-bottom:4px">{rec['action']}</div>
-                <div style="font-size:0.8rem;color:#6B7280">ℹ️ {rec['why_it_matters']}</div>
-            </div>""", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+                <div style="font-size:0.9rem;color:#D1D5DB;margin-bottom:4px">{rec["action"]}</div>
+                <div style="font-size:0.8rem;color:#6B7280">ℹ️ {rec["why_it_matters"]}</div>
+            </div>""",
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # ── STRENGTHS ──────────────────────────────────────────────────────
     strengths = insight.get("strengths", [])
@@ -701,8 +788,10 @@ elif page == "Student Dashboard":
         cols = st.columns(min(len(strengths), 3))
         for i, s in enumerate(strengths):
             with cols[i % 3]:
-                st.markdown(f'<div class="strength-chip">✅ {s["message"]}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="strength-chip">✅ {s["message"]}</div>', unsafe_allow_html=True
+                )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # ── SCORE HISTORY ──────────────────────────────────────────────────
     try:
@@ -715,8 +804,10 @@ elif page == "Student Dashboard":
             hist_df = hist_df.sort_values("recorded_at")
             st.line_chart(hist_df.set_index("recorded_at")["readiness_score"])
         else:
-            st.caption("Run the pipeline multiple times over several sessions to build a score history trend.")
-        st.markdown('</div>', unsafe_allow_html=True)
+            st.caption(
+                "Run the pipeline multiple times over several sessions to build a score history trend."
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
     except Exception:
         pass
 
@@ -725,12 +816,20 @@ elif page == "Student Dashboard":
 # PAGE 3: LEADERBOARD
 # ═══════════════════════════════════════════════════════════════════════
 elif page == "Leaderboard":
-    st.markdown('<h2 style="color:#F9FAFB;margin-bottom:4px">🏆 Placement Readiness Leaderboard</h2>', unsafe_allow_html=True)
-    st.markdown('<p style="color:#9CA3AF;margin-bottom:20px">Ranked by ML-predicted readiness score.</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<h2 style="color:#F9FAFB;margin-bottom:4px">🏆 Placement Readiness Leaderboard</h2>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p style="color:#9CA3AF;margin-bottom:20px">Ranked by ML-predicted readiness score.</p>',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        selected_branch = st.selectbox("Filter by Branch", ["All Branches","CSE","IT","ECE","MECH","EEE"])
+        selected_branch = st.selectbox(
+            "Filter by Branch", ["All Branches", "CSE", "IT", "ECE", "MECH", "EEE"]
+        )
     with col2:
         limit = st.slider("Show top N", 5, 50, 20)
 
@@ -750,31 +849,52 @@ elif page == "Leaderboard":
     avg_score = sum(r["composite_score"] for r in ranking) / len(ranking)
     s1, s2, s3 = st.columns(3)
     with s1:
-        st.markdown(f'<div class="pis-card" style="text-align:center"><div class="score-label">Students Ranked</div><div style="font-size:2rem;font-weight:800;color:#22C55E">{len(ranking)}</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="pis-card" style="text-align:center"><div class="score-label">Students Ranked</div><div style="font-size:2rem;font-weight:800;color:#22C55E">{len(ranking)}</div></div>',
+            unsafe_allow_html=True,
+        )
     with s2:
-        st.markdown(f'<div class="pis-card" style="text-align:center"><div class="score-label">Average Score</div><div style="font-size:2rem;font-weight:800;color:#22C55E">{avg_score:.1f}</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="pis-card" style="text-align:center"><div class="score-label">Average Score</div><div style="font-size:2rem;font-weight:800;color:#22C55E">{avg_score:.1f}</div></div>',
+            unsafe_allow_html=True,
+        )
     with s3:
         top_name = ranking[0]["name"]
-        st.markdown(f'<div class="pis-card-accent" style="text-align:center"><div class="score-label">Top Performer</div><div style="font-size:1.2rem;font-weight:800;color:#86EFAC">🥇 {top_name}</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="pis-card-accent" style="text-align:center"><div class="score-label">Top Performer</div><div style="font-size:1.2rem;font-weight:800;color:#86EFAC">🥇 {top_name}</div></div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     # ── Table ──────────────────────────────────────────────────────────
     df = pd.DataFrame(ranking)
-    df = df.rename(columns={
-        "global_rank":"Rank","name":"Name","branch":"Branch","cgpa":"CGPA",
-        "total_problems":"Problems","composite_score":"Score",
-        "percentile":"Percentile %","branch_rank":"Branch Rank",
-    })
+    df = df.rename(
+        columns={
+            "global_rank": "Rank",
+            "name": "Name",
+            "branch": "Branch",
+            "cgpa": "CGPA",
+            "total_problems": "Problems",
+            "composite_score": "Score",
+            "percentile": "Percentile %",
+            "branch_rank": "Branch Rank",
+        }
+    )
 
     def cat_emoji(cat):
-        if not cat: return "⚪"
+        if not cat:
+            return "⚪"
         return "🟢" if cat == "Ready" else "🟡" if cat == "Near Ready" else "🔴"
 
     if "category" in df.columns:
         df["Status"] = df["category"].apply(cat_emoji)
 
-    display_cols = [c for c in ["Rank","Status","Name","Branch","CGPA","Problems","Score","Percentile %"] if c in df.columns]
+    display_cols = [
+        c
+        for c in ["Rank", "Status", "Name", "Branch", "CGPA", "Problems", "Score", "Percentile %"]
+        if c in df.columns
+    ]
 
     def highlight_top(row):
         if row["Rank"] == 1:
@@ -788,6 +908,7 @@ elif page == "Leaderboard":
     st.markdown('<div class="pis-card">', unsafe_allow_html=True)
     st.dataframe(
         df[display_cols].style.apply(highlight_top, axis=1),
-        use_container_width=True, hide_index=True,
+        use_container_width=True,
+        hide_index=True,
     )
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)

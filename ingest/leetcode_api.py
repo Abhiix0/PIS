@@ -4,6 +4,7 @@ The endpoint is unofficial and its terms are unverified (docs/research/data-sour
 sync service only calls this when LEETCODE_INTEGRATION_ENABLED is set. Per-problem rows and solve dates are
 NOT observable from this query and are never generated.
 """
+
 import re
 
 import requests
@@ -47,11 +48,14 @@ def fetch_leetcode_observations(username: str) -> tuple[list[Observation], bool]
     if not USERNAME_RE.match(username or ""):
         raise ProviderError("not_found", "invalid LeetCode username")
     try:
-        resp = requests.post(LEETCODE_GQL_URL, json={"query": PROFILE_QUERY, "variables": {"u": username}},
-                             headers={"Content-Type": "application/json", "Referer": "https://leetcode.com"},
-                             timeout=15)
+        resp = requests.post(
+            LEETCODE_GQL_URL,
+            json={"query": PROFILE_QUERY, "variables": {"u": username}},
+            headers={"Content-Type": "application/json", "Referer": "https://leetcode.com"},
+            timeout=15,
+        )
     except (requests.Timeout, requests.ConnectionError):
-        raise ProviderError("unavailable", "LeetCode unreachable")
+        raise ProviderError("unavailable", "LeetCode unreachable") from None
     if resp.status_code == 429:
         raise ProviderError("rate_limited")
     if resp.status_code != 200:
@@ -59,7 +63,7 @@ def fetch_leetcode_observations(username: str) -> tuple[list[Observation], bool]
     try:
         data = resp.json()
     except ValueError:
-        raise ProviderError("malformed", "response is not JSON")
+        raise ProviderError("malformed", "response is not JSON") from None
     if not isinstance(data, dict) or data.get("errors"):
         raise ProviderError("malformed", "GraphQL error or unexpected shape")
     user = (data.get("data") or {}).get("matchedUser")
@@ -69,5 +73,7 @@ def fetch_leetcode_observations(username: str) -> tuple[list[Observation], bool]
     if not isinstance(stats, list) or not stats:
         raise ProviderError("malformed", "no submission stats")
     counts = _parse_submission_stats(stats)
-    return [Observation("leetcode", f"leetcode_solved_{d}", n, payload_version=PAYLOAD_VERSION)
-            for d, n in counts.items()], False
+    return [
+        Observation("leetcode", f"leetcode_solved_{d}", n, payload_version=PAYLOAD_VERSION)
+        for d, n in counts.items()
+    ], False

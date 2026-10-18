@@ -1,4 +1,5 @@
 """Auth test support: a locally generated RSA key stands in for the IdP's JWKS."""
+
 import time
 
 import jwt
@@ -17,7 +18,15 @@ config.AUTH_ISSUER, config.AUTH_AUDIENCE, config.AUTH_JWKS_URL = ISS, AUD, "http
 
 def make_token(sub, roles=(), exp_in=3600, iat_offset=0, key=_KEY, aud=AUD, **extra):
     now = int(time.time()) + iat_offset
-    claims = {"sub": sub, "iss": ISS, "aud": aud, "iat": now, "exp": now + exp_in, config.AUTH_ROLE_CLAIM: list(roles), **extra}
+    claims = {
+        "sub": sub,
+        "iss": ISS,
+        "aud": aud,
+        "iat": now,
+        "exp": now + exp_in,
+        config.AUTH_ROLE_CLAIM: list(roles),
+        **extra,
+    }
     return jwt.encode(claims, key, algorithm="RS256")
 
 
@@ -45,14 +54,15 @@ def _test_db(tmp_path_factory):
         yield
         return
 
+    import json
+
+    import joblib
     import psycopg2
     from psycopg2 import sql
     from psycopg2.extensions import make_dsn
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.preprocessing import MinMaxScaler
 
-    import joblib
-    import json
     from features.compute import load_features, run_feature_sql
     from ingest import db_connection
     from ingest.migrate import migrate
@@ -70,6 +80,7 @@ def _test_db(tmp_path_factory):
         migrate(dsn, seed=True)
         # db_connection and services.pipeline bind DATABASE_URL at import; repoint all of them.
         import services.pipeline
+
         for mod in (config, db_connection, services.pipeline):
             mp.setattr(mod, "DATABASE_URL", dsn)
         db_connection.close_pool()
@@ -90,13 +101,19 @@ def _test_db(tmp_path_factory):
         joblib.dump(reg, src / "regressor.pkl")
         joblib.dump(clf, src / "classifier.pkl")
         joblib.dump(scaler, src / "scaler.pkl")
-        (src / "feature_importances.json").write_text(json.dumps({
-            "regressor": dict(zip(cols, reg.feature_importances_.tolist())),
-            "classifier": dict(zip(cols, clf.feature_importances_.tolist()))}))
+        (src / "feature_importances.json").write_text(
+            json.dumps(
+                {
+                    "regressor": dict(zip(cols, reg.feature_importances_.tolist())),
+                    "classifier": dict(zip(cols, clf.feature_importances_.tolist())),
+                }
+            )
+        )
         version = bundle.create_candidate(src, {"label_origin": "synthetic_formula"})
         bundle.approve(version, "pytest", "test fixture")
         bundle.activate(version, "pytest")
         from ml.predict import predict
+
         for sid in raw["student_id"]:
             predict(int(sid))  # /prediction, /ranking read stored predictions
         yield dsn
@@ -104,5 +121,7 @@ def _test_db(tmp_path_factory):
         mp.undo()
         db_connection.close_pool()
         with admin.cursor() as cur:
-            cur.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name)))
+            cur.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
+            )
         admin.close()
