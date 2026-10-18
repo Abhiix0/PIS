@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies first (layer caching — only re-runs if requirements.txt changes)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
 
 # Copy application code
 COPY . .

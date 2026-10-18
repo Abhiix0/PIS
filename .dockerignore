@@ -1,0 +1,22 @@
+.env
+.git
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env.*
+!.env.example
+apps/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.git*
+node_modules/
+# generated at boot / by training; mirrors .gitignore
+models/*.pkl
+models/*.json
+models/staging/
+models/bundles/
+features/*.csv
+experiments/

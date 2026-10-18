@@ -1,0 +1,43 @@
+/* Design tokens. Values and sources: docs/design/design-system.md */
+:root {
+  --bg: #fff;
+  --surface: #fff;
+  --surface-dark: #1c1c1c;
+  --text: #0a0a0a;
+  --text-on-dark: #fff;
+  --muted: #555;
+  --border: #e4e4e4;
+  --primary: #0a0a0a;
+  --primary-text: #fff;
+  --accent: #ff6b2c;
+  --accent-text: #c2410c;
+  --info: #3a6bfa;
+  --ok: #15803d;
+  --warn: #b45309;
+  --danger: #b91c1c;
+  --ok-bg: #e8f5ec;
+  --warn-bg: #fdf1e1;
+  --danger-bg: #fbe9e9;
+  --info-bg: #e9efff;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --shadow-card: 0 8px 24px rgb(10 10 10 / 8%);
+  --font: "Inter Variable", system-ui, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-md: 16px;
+  --fs-lg: 22px;
+  --fs-xl: 32px;
+  --fs-display: 56px;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+  --focus: 0 0 0 3px rgb(58 107 250 / 55%);
+}

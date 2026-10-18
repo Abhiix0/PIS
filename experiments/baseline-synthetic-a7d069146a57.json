@@ -1,0 +1,109 @@
+{
+  "synthetic": true,
+  "claim": "Pipeline smoke test on synthetic formula labels. Says nothing about placement outcomes.",
+  "dataset": {
+    "path": "features/features_raw.csv",
+    "sha256": "a7d069146a579b63d8b4ee4f3f1a355bad03e2e2086dc5cca84a5eb819e6d9fb",
+    "rows": 9,
+    "students": 9,
+    "origin": "seed.sql demo students"
+  },
+  "feature_schema_version": "legacy-5feature-v1",
+  "features": [
+    "cgpa",
+    "total_problems",
+    "avg_difficulty",
+    "consistency_score",
+    "commit_frequency"
+  ],
+  "target": "readiness_score: weighted formula of min-max scaled features + N(0, 5) noise (synthetic)",
+  "label_noise": {
+    "std": 5.0,
+    "seed": 42
+  },
+  "split": "GroupKFold(n_splits=9) by student_id (leave-one-student-out); no untouched final test set: n is too small to hold one out",
+  "seed": 42,
+  "code_revision": "9757da36535591f418a610dde3f2e3e6770b5d0c+dirty",
+  "runtime": {
+    "python": "3.14.2",
+    "sklearn": "1.8.0",
+    "pandas": "3.0.1",
+    "numpy": "2.4.3",
+    "platform": "Windows-11-10.0.26300-SP0"
+  },
+  "metrics": {
+    "mean": {
+      "mae": 24.767,
+      "mae_ci95_bootstrap": [
+        15.48,
+        34.456
+      ],
+      "rmse": 28.669,
+      "params": {
+        "constant": null,
+        "quantile": null,
+        "strategy": "mean"
+      },
+      "skill_vs_mean": 0.0
+    },
+    "rule_formula": {
+      "mae": 9.756,
+      "mae_ci95_bootstrap": [
+        3.739,
+        17.462
+      ],
+      "rmse": 14.806,
+      "params": {},
+      "skill_vs_mean": 0.606
+    },
+    "ridge": {
+      "mae": 6.375,
+      "mae_ci95_bootstrap": [
+        4.11,
+        8.461
+      ],
+      "rmse": 7.218,
+      "params": {
+        "alpha": 1.0,
+        "copy_X": true,
+        "fit_intercept": true,
+        "max_iter": null,
+        "positive": false,
+        "random_state": null,
+        "solver": "auto",
+        "tol": 0.0001
+      },
+      "skill_vs_mean": 0.743
+    },
+    "random_forest": {
+      "mae": 7.763,
+      "mae_ci95_bootstrap": [
+        4.012,
+        12.551
+      ],
+      "rmse": 10.343,
+      "params": {
+        "bootstrap": true,
+        "ccp_alpha": 0.0,
+        "criterion": "squared_error",
+        "max_depth": null,
+        "max_features": 1.0,
+        "max_leaf_nodes": null,
+        "max_samples": null,
+        "min_impurity_decrease": 0.0,
+        "min_samples_leaf": 1,
+        "min_samples_split": 2,
+        "min_weight_fraction_leaf": 0.0,
+        "monotonic_cst": null,
+        "n_estimators": 100,
+        "n_jobs": null,
+        "oob_score": false,
+        "random_state": 42,
+        "verbose": 0,
+        "warm_start": false
+      },
+      "skill_vs_mean": 0.687
+    }
+  },
+  "report_sha256": "a920eb9bf8aedd7f62fb195f718ca5721242bf377bf23c13e24b8176d1bab4e0"
+}

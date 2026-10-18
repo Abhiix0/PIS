@@ -1,0 +1,8 @@
+[run]
+branch = True
+source = app, services, ml, ingest
+
+[report]
+show_missing = True
+# measured 79.49% (branch) on 2026-10-18; raise as coverage grows
+fail_under = 79

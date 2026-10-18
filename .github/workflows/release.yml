@@ -1,0 +1,69 @@
+name: release
+# Tag vX.Y.Z -> build, (optionally) sign, checksum, draft GitHub release. Never publishes automatically.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: apps/desktop } }
+    env:
+      VITE_API_BASE_URL: ${{ vars.PIS_API_BASE_URL }}
+      VITE_AUTH_ISSUER: ${{ vars.PIS_AUTH_ISSUER }}
+      VITE_AUTH_CLIENT_ID: ${{ vars.PIS_AUTH_CLIENT_ID }}
+      VITE_AUTH_AUDIENCE: ${{ vars.PIS_AUTH_AUDIENCE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match app version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $conf = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ((@($tag, $conf, $pkg, $cargo) | Sort-Object -Unique).Count -ne 1) { throw "version mismatch: tag=$tag conf=$conf pkg=$pkg cargo=$cargo" }
+          if (-not $env:VITE_API_BASE_URL.StartsWith("https://")) { throw "PIS_API_BASE_URL must be an https URL for release builds" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/desktop/package-lock.json }
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx tauri build
+      - name: Authenticode sign (only if a certificate secret is configured)
+        shell: pwsh
+        env:
+          PIS_SIGN_PFX_B64: ${{ secrets.PIS_SIGN_PFX_B64 }}
+          PIS_SIGN_PFX_PASSWORD: ${{ secrets.PIS_SIGN_PFX_PASSWORD }}
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe
+          if (-not $env:PIS_SIGN_PFX_B64) { Write-Warning "No signing certificate: installer is UNSIGNED"; "unsigned" | Set-Content ../../signing-status.txt; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP "sign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PIS_SIGN_PFX_B64))
+          try {
+            & signtool sign /f $pfx /p $env:PIS_SIGN_PFX_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $exe.FullName
+            if ($LASTEXITCODE) { throw "signtool failed" }
+            & signtool verify /pa $exe.FullName
+            if ($LASTEXITCODE) { throw "signature verification failed" }
+          } finally { Remove-Item $pfx -Force }
+          "signed" | Set-Content ../../signing-status.txt
+      - name: Checksums and release metadata
+        shell: pwsh
+        run: |
+          $out = New-Item -ItemType Directory ../../release -Force
+          Copy-Item src-tauri/target/release/bundle/nsis/*.exe $out
+          Push-Location $out
+          Get-ChildItem *.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content SHA256SUMS.txt
+          @{ tag = "${{ github.ref_name }}"; commit = "${{ github.sha }}"; signing = (Get-Content ../signing-status.txt); built_utc = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json | Set-Content release.json
+          Pop-Location
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            release/*.exe
+            release/SHA256SUMS.txt
+            release/release.json

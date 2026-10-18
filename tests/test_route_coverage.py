@@ -1,0 +1,54 @@
+"""Phase 14 regression: every registered route rejects anonymous callers except the health allowlist (DB-free)."""
+
+import re
+from pathlib import Path
+
+import pytest
+from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+PUBLIC = {
+    "/health",
+    "/health/detailed",
+    "/health/ready",
+    "/openapi.json",
+    "/docs",
+    "/docs/oauth2-redirect",
+    "/redoc",
+}
+ROUTES = [
+    (m, r.path)
+    for r in app.routes
+    if isinstance(r, APIRoute)
+    for m in r.methods
+    if r.path not in PUBLIC
+]
+client = TestClient(app)
+
+
+@pytest.mark.parametrize("method,path", ROUTES)
+def test_route_requires_token(method, path):
+    resp = client.request(method, re.sub(r"\{[^}]+\}", "1", path))
+    assert resp.status_code == 401, f"{method} {path} -> {resp.status_code}"
+
+
+def test_oversized_body_rejected():
+    resp = client.post("/api/v1/assessments", content=b"x", headers={"content-length": "999999999"})
+    assert resp.status_code == 413
+
+
+def test_api_surface_doc_matches_routes():
+    doc = (Path(__file__).parents[1] / "docs/architecture/api-surface.md").read_text("utf-8")
+    documented = set(re.findall(r"^\| `([A-Z]+) (/\S*)` \|", doc, re.M))
+    actual = {
+        (m, r.path) for r in app.routes if isinstance(r, APIRoute) for m in r.methods - {"HEAD"}
+    }
+    assert documented == actual
+
+
+def test_every_error_uses_one_envelope():
+    for path in ("/nope", "/api/v1/nope", "/admin/models"):
+        body = client.get(path).json()
+        assert set(body) == {"error"} and set(body["error"]) == {"code", "message", "request_id"}
