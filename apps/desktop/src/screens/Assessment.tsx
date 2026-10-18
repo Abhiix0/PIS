@@ -1,4 +1,4 @@
-import { Empty, ErrorState, Loading } from "../components/ui";
+import { EmptyState, ErrorState, Loading, Table } from "../components";
 import { FEATURE_DEFS, hasScore } from "../lib/assessment";
 import { useLatest } from "./useLatest";
 
@@ -12,7 +12,7 @@ export default function Assessment() {
     return (
       <>
         <h1>Assessment</h1>
-        <Empty title="No assessment yet" hint="Run one from the Overview." />
+        <EmptyState title="No assessment yet" hint="Run one from the Overview." />
       </>
     );
   const { a, ev } = l;
@@ -30,7 +30,7 @@ export default function Assessment() {
           : `No ML estimate. ${a.reason}`}
       </p>
       <h2>Evidence</h2>
-      <table>
+      <Table>
         <thead>
           <tr>
             <th>Item</th>
@@ -64,7 +64,7 @@ export default function Assessment() {
             )),
           )}
         </tbody>
-      </table>
+      </Table>
       <h2>Limitations</h2>
       <ul>
         <li>This is an evidence summary. It does not predict hiring or placement outcomes.</li>

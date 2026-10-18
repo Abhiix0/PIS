@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getEvidence, listAssessments, type Assessment } from "../api/v1";
-import { Empty, ErrorState, Loading } from "../components/ui";
+import { Banner, Button, EmptyState, ErrorState, Loading, Table } from "../components";
 import { compare, type Comparison } from "../lib/assessment";
 import { friendly } from "./Dashboard";
 
@@ -35,7 +35,7 @@ export default function History() {
     return (
       <>
         <h1>History</h1>
-        <Empty title="No assessments yet" />
+        <EmptyState title="No assessments yet" />
       </>
     );
 
@@ -70,23 +70,21 @@ export default function History() {
           </li>
         ))}
       </ul>
-      <button className="btn" disabled={pick.length !== 2} onClick={() => void run()}>
+      <Button disabled={pick.length !== 2} onClick={() => void run()}>
         Compare selected (pick 2)
-      </button>
+      </Button>
       {cmp && (
         <section aria-label="Comparison">
           {!cmp.comparable && <p role="alert">These snapshots cannot be compared. {cmp.notes.join(" ")}</p>}
           {cmp.comparable && (
             <>
               {cmp.notes.map((t) => (
-                <p key={t} className="pill">
-                  {t}
-                </p>
+                <Banner key={t}>{t}</Banner>
               ))}
               {cmp.deltas.length === 0 ? (
                 <p>No observed values in either snapshot.</p>
               ) : (
-                <table>
+                <Table>
                   <thead>
                     <tr>
                       <th>Item</th>
@@ -103,7 +101,7 @@ export default function History() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </Table>
               )}
             </>
           )}

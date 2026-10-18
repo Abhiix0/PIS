@@ -1,6 +1,6 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { ConnectionProvider, useConnection } from "./connection";
-import { Button, ErrorState, Loading } from "./components/ui";
+import { AppShell, Badge, Button, ErrorState, Loading } from "./components";
 import { SessionProvider, useSession } from "./auth/session";
 import Assessment from "./screens/Assessment";
 import Dashboard from "./screens/Dashboard";
@@ -13,7 +13,13 @@ import Privacy from "./screens/Privacy";
 function Status() {
   const { status } = useConnection();
   const text = { checking: "Checking API…", online: "API online", offline: "API offline" }[status];
-  return <span className={`pill ${status}`}>{text}</span>;
+  return (
+    <Badge
+      tone={{ checking: "neutral", online: "ok", offline: "danger" }[status] as "neutral" | "ok" | "danger"}
+    >
+      {text}
+    </Badge>
+  );
 }
 
 function Settings() {
@@ -47,38 +53,33 @@ function SignIn() {
   );
 }
 
+const NAV = [
+  { to: "/overview", label: "Overview" },
+  { to: "/integrations", label: "Integrations" },
+  { to: "/assessment", label: "Assessment" },
+  { to: "/plan", label: "Development plan" },
+  { to: "/history", label: "History" },
+  { to: "/dashboard", label: "Profile" },
+  { to: "/settings", label: "Settings" },
+];
+
 function Shell() {
   const { state } = useSession();
   if (state === "loading") return <Loading />;
   if (state !== "signed-in") return <SignIn />;
   return (
-    <div className="shell">
-      <header>
-        <strong>Placement Intelligence</strong>
-        <Status />
-      </header>
-      <nav aria-label="Primary">
-        <NavLink to="/overview">Overview</NavLink>
-        <NavLink to="/integrations">Integrations</NavLink>
-        <NavLink to="/assessment">Assessment</NavLink>
-        <NavLink to="/plan">Development plan</NavLink>
-        <NavLink to="/history">History</NavLink>
-        <NavLink to="/dashboard">Profile</NavLink>
-        <NavLink to="/settings">Settings</NavLink>
-      </nav>
-      <main>
-        <Routes>
-          <Route path="/overview" element={<Overview />} />
-          <Route path="/integrations" element={<Integrations />} />
-          <Route path="/assessment" element={<Assessment />} />
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to="/overview" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <AppShell title="Placement Intelligence" nav={NAV} status={<Status />}>
+      <Routes>
+        <Route path="/overview" element={<Overview />} />
+        <Route path="/integrations" element={<Integrations />} />
+        <Route path="/assessment" element={<Assessment />} />
+        <Route path="/plan" element={<Plan />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<Navigate to="/overview" replace />} />
+      </Routes>
+    </AppShell>
   );
 }
 

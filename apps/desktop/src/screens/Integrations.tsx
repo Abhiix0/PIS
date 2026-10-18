@@ -8,7 +8,7 @@ import {
   type Integration,
   type SyncRun,
 } from "../api/v1";
-import { Button, Empty, ErrorState, Field, Loading } from "../components/ui";
+import { Button, EmptyState, ErrorState, Input, Loading } from "../components";
 import { friendly } from "./Dashboard";
 
 const PROVIDERS = [
@@ -135,18 +135,19 @@ function Provider({
           </Button>
           <p>
             <label>
-              <input type="checkbox" checked={wipe} onChange={(e) => setWipe(e.target.checked)} /> Also delete data
-              imported from {p.name}
+              <input type="checkbox" checked={wipe} onChange={(e) => setWipe(e.target.checked)} /> Also delete
+              data imported from {p.name}
             </label>
           </p>
           <p className="muted">
-            Disconnecting stops syncing; no {p.name} credentials are stored, so none need revoking. Imported data is
-            kept unless you tick the box. Past assessments keep the snapshot they were built from either way.
+            Disconnecting stops syncing; no {p.name} credentials are stored, so none need revoking. Imported
+            data is kept unless you tick the box. Past assessments keep the snapshot they were built from
+            either way.
           </p>
         </>
       ) : (
         <form onSubmit={connect} noValidate>
-          <Field
+          <Input
             label={`${p.name} username`}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -156,9 +157,9 @@ function Provider({
             PIS may read the public data listed above for this account.
           </label>
           <div>
-            <button className="btn" type="submit" disabled={busy || !consent || !username.trim()}>
+            <Button type="submit" disabled={busy || !consent || !username.trim()}>
               Connect
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -197,7 +198,10 @@ export default function Integrations() {
     <>
       <h1>Integrations</h1>
       {items.length === 0 && (
-        <Empty title="Nothing connected yet" hint="Connect an account to give the assessment evidence." />
+        <EmptyState
+          title="Nothing connected yet"
+          hint="Connect an account to give the assessment evidence."
+        />
       )}
       {PROVIDERS.map((p) => (
         <Provider key={p.id} p={p} conn={items.find((i) => i.provider === p.id)} reload={reload} />

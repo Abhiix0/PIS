@@ -1,4 +1,4 @@
-import { Empty, ErrorState, Loading } from "../components/ui";
+import { EmptyState, ErrorState, Loading } from "../components";
 import { DISCLAIMER, priorities } from "../lib/assessment";
 import { useLatest } from "./useLatest";
 
@@ -10,7 +10,7 @@ export default function Plan() {
     return (
       <>
         <h1>Development plan</h1>
-        <Empty title="No assessment yet" hint="Run one from the Overview to get priorities." />
+        <EmptyState title="No assessment yet" hint="Run one from the Overview to get priorities." />
       </>
     );
   const ps = priorities(l.ev);
@@ -19,7 +19,7 @@ export default function Plan() {
       <h1>Development plan</h1>
       <p className="muted">{DISCLAIMER} These come from fixed rules, not from the ML model.</p>
       {ps.length === 0 ? (
-        <Empty
+        <EmptyState
           title="No priorities from current evidence"
           hint="Nothing in your latest snapshot triggers a suggestion."
         />

@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import App from "../App";
 import { ConnectionProvider, useConnection } from "../connection";
-import { ErrorState, Field } from "./ui";
+import { ErrorState, Input } from ".";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -46,7 +46,7 @@ it("shows the sign-in screen, not app data, when there is no session", async () 
 it("labels fields and errors accessibly", () => {
   render(
     <>
-      <Field label="Email" error="Required" />
+      <Input label="Email" error="Required" />
       <ErrorState message="x" />
     </>,
   );

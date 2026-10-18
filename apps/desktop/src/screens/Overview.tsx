@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createAssessment } from "../api/v1";
-import { Button, Empty, ErrorState, Loading } from "../components/ui";
+import { Banner, Button, EmptyState, ErrorState, Loading } from "../components";
 import { DISCLAIMER, hasScore, isStale, priorities } from "../lib/assessment";
 import { friendly } from "./Dashboard";
 import { useLatest } from "./useLatest";
@@ -42,7 +42,10 @@ export default function Overview() {
     return (
       <>
         <h1>Overview</h1>
-        <Empty title="No assessment yet" hint="Connect a source, sync it, then run your first assessment." />
+        <EmptyState
+          title="No assessment yet"
+          hint="Connect a source, sync it, then run your first assessment."
+        />
         <RunAssessment onDone={reload} />
       </>
     );
@@ -53,7 +56,7 @@ export default function Overview() {
       <h1>Overview</h1>
       <p>Last assessment: {new Date(a.created_at).toLocaleString()}</p>
       {stale && (
-        <p className="pill">Some provider data is more than a week old. Re-sync for current evidence.</p>
+        <Banner tone="warn">Some provider data is more than a week old. Re-sync for current evidence.</Banner>
       )}
       {hasScore(a) ? (
         <p>

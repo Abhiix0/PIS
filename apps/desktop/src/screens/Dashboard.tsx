@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { getIntegrations, getMe, putProfile, type Integration, type Profile } from "../api/v1";
-import { Button, Empty, ErrorState, Field, Loading } from "../components/ui";
+import { Button, EmptyState, ErrorState, Input, Loading } from "../components";
 
 export const friendly = (e: unknown) =>
   e instanceof ApiError
@@ -65,24 +65,24 @@ function ProfileForm({ initial, onSaved }: { initial: Profile | null; onSaved: (
 
   return (
     <form onSubmit={submit} noValidate>
-      <Field label="Name" value={f.display_name} onChange={set("display_name")} error={errors.display_name} />
-      <Field label="Branch" value={f.branch} onChange={set("branch")} />
-      <Field
+      <Input label="Name" value={f.display_name} onChange={set("display_name")} error={errors.display_name} />
+      <Input label="Branch" value={f.branch} onChange={set("branch")} />
+      <Input
         label="Graduation year"
         inputMode="numeric"
         value={f.graduation_year}
         onChange={set("graduation_year")}
         error={errors.graduation_year}
       />
-      <Field label="CGPA" inputMode="decimal" value={f.cgpa} onChange={set("cgpa")} error={errors.cgpa} />
+      <Input label="CGPA" inputMode="decimal" value={f.cgpa} onChange={set("cgpa")} error={errors.cgpa} />
       {failure && (
         <p role="alert" className="err">
           {failure}
         </p>
       )}
-      <button className="btn" type="submit" disabled={saving}>
+      <Button type="submit" disabled={saving}>
         {saving ? "Saving…" : "Save profile"}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -145,7 +145,7 @@ export default function Dashboard() {
       <section aria-labelledby="h-int">
         <h2 id="h-int">Integrations</h2>
         {items.length === 0 ? (
-          <Empty
+          <EmptyState
             title="No integrations connected"
             hint="Connect GitHub or LeetCode from the Integrations screen."
           />
