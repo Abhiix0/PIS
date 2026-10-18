@@ -146,22 +146,3 @@ def test_seed_loads_once_and_is_refused_when_deployed(fresh_db, monkeypatch):
     monkeypatch.setattr(config, "APP_ENV", "production")
     with pytest.raises(RuntimeError):
         migrate(fresh_db, seed=True)
-
-
-@needs_db
-def test_full_and_single_feature_sql_agree(fresh_db, monkeypatch):
-    monkeypatch.setattr(config, "APP_ENV", "test")
-    migrate(fresh_db, seed=True)
-    conn = psycopg2.connect(fresh_db)
-    cols = "student_id, total_problems, avg_difficulty, commit_frequency, consistency_score"
-    with conn, conn.cursor() as cur:
-        cur.execute((ROOT / "feature_engineering.sql").read_text())
-        cur.execute(f"SELECT {cols} FROM features ORDER BY student_id")
-        full = cur.fetchall()
-        cur.execute("DELETE FROM features")
-        for sid in range(1, 9):
-            cur.execute((ROOT / "feature_engineering_single.sql").read_text(), {"student_id": sid})
-        cur.execute(f"SELECT {cols} FROM features ORDER BY student_id")
-        single = cur.fetchall()
-    conn.close()
-    assert len(full) == 8 and full == single

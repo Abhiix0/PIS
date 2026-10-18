@@ -8,7 +8,6 @@ from ingest.db_connection import get_connection, query_df
 _ROOT = Path(__file__).parent.parent
 
 SQL_PATH = _ROOT / "sql" / "feature_engineering.sql"
-SQL_SINGLE_PATH = _ROOT / "sql" / "feature_engineering_single.sql"
 FEATURES_CSV = _ROOT / "features" / "features_scaled.csv"
 RAW_CSV = _ROOT / "features" / "features_raw.csv"
 
@@ -29,18 +28,6 @@ def run_feature_sql():
         with conn.cursor() as cur:
             cur.execute(sql)
     print("Feature SQL executed — features table updated.")
-
-
-def run_feature_sql_for_student(student_id: int):
-    """Execute the parameterised single-student SQL pipeline.
-    Use for real-time pipeline calls (POST /pipeline/{id}).
-    O(1) — only touches rows for this student_id.
-    """
-    sql = SQL_SINGLE_PATH.read_text()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, {"student_id": student_id})
-    print(f"Feature SQL executed — student {student_id} features updated.")
 
 
 def load_features() -> pd.DataFrame:

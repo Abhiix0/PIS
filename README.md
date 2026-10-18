@@ -1,5 +1,7 @@
 # Placement Intelligence System (PIS)
 
+> **Out of date:** the legacy `/students`, `/pipeline`, `/insights` endpoints and the Streamlit dashboard were removed. Current routes: `docs/architecture/api-surface.md`; repo map: `CLAUDE.md`. The sections below are not yet rewritten.
+
 A data-driven platform that evaluates student placement readiness using SQL feature engineering, Random Forest ML, and a hybrid rule + ML insight engine.
 
 ---

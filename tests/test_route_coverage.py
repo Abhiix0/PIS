@@ -1,6 +1,7 @@
 """Phase 14 regression: every registered route rejects anonymous callers except the health allowlist (DB-free)."""
 
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.routing import APIRoute
@@ -34,5 +35,20 @@ def test_route_requires_token(method, path):
 
 
 def test_oversized_body_rejected():
-    resp = client.post("/students", content=b"x", headers={"content-length": "999999999"})
+    resp = client.post("/api/v1/assessments", content=b"x", headers={"content-length": "999999999"})
     assert resp.status_code == 413
+
+
+def test_api_surface_doc_matches_routes():
+    doc = (Path(__file__).parents[1] / "docs/architecture/api-surface.md").read_text("utf-8")
+    documented = set(re.findall(r"^\| `([A-Z]+) (/\S*)` \|", doc, re.M))
+    actual = {
+        (m, r.path) for r in app.routes if isinstance(r, APIRoute) for m in r.methods - {"HEAD"}
+    }
+    assert documented == actual
+
+
+def test_every_error_uses_one_envelope():
+    for path in ("/nope", "/api/v1/nope", "/admin/models"):
+        body = client.get(path).json()
+        assert set(body) == {"error"} and set(body["error"]) == {"code", "message", "request_id"}

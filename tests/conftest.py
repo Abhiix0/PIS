@@ -78,10 +78,8 @@ def _test_db(tmp_path_factory):
     mp = pytest.MonkeyPatch()
     try:
         migrate(dsn, seed=True)
-        # db_connection and services.pipeline bind DATABASE_URL at import; repoint all of them.
-        import services.pipeline
-
-        for mod in (config, db_connection, services.pipeline):
+        # db_connection binds DATABASE_URL at import; repoint both.
+        for mod in (config, db_connection):
             mp.setattr(mod, "DATABASE_URL", dsn)
         db_connection.close_pool()
         mp.setattr(bundle, "BUNDLES_DIR", tmp_path_factory.mktemp("bundles"))

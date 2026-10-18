@@ -65,7 +65,7 @@ def test_every_scaled_feature_is_in_the_data_dictionary():
 
 
 def test_no_code_path_invents_leetcode_rows_or_dates():
-    for rel in ("ingest/leetcode_api.py", "services/pipeline.py", "app/routers/ingest.py"):
+    for rel in ("ingest/leetcode_api.py", "services/sync.py"):
         src = (ROOT / rel).read_text(encoding="utf-8")
         assert not re.search(r"\brandom\b|SYNTHETIC_WEIGHT|REAL_WEIGHT|fetch_leetcode_data", src), (
             rel

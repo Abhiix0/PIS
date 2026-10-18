@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from ingest.github_api import fetch_github_data, fetch_github_observations
+from ingest.github_api import fetch_github_observations
 from ingest.provider import ProviderError
 
 
@@ -168,14 +168,3 @@ def test_bad_username_never_reaches_the_network(name):
         with pytest.raises(ProviderError) as e:
             fetch_github_observations(name)
     assert e.value.code == "not_found" and g.call_count == 0
-
-
-def test_legacy_shape_uses_push_date_and_skips_zero_commit_repos():
-    fake = router(
-        resp(body=[repo("a"), repo("b")]),
-        lambda r: resp(body=[{}], headers=last_page(3)) if r == "a" else resp(status=409),
-    )
-    with patch("requests.get", side_effect=fake):
-        rows = fetch_github_data("testuser")
-    assert len(rows) == 1 and rows[0]["repo_name"] == "a" and rows[0]["commits"] == 3
-    assert str(rows[0]["commit_date"]) == "2024-03-01"

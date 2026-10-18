@@ -5,27 +5,6 @@ Core tests for PIS — run without a live DB or model files.
 
 from unittest.mock import patch
 
-# ── Test 1: Rule engine fires correctly ──────────────────────────────
-
-
-def test_rule_fires_below_threshold():
-    from insights.rules import RULES
-
-    rule = next(r for r in RULES if r.feature == "total_problems")
-    assert rule.is_weak(49) is True  # below threshold of 50
-    assert rule.is_weak(50) is False  # at threshold — not weak
-    assert rule.is_weak(100) is False  # well above
-
-
-def test_rule_consistency_score():
-    from insights.rules import RULES
-
-    rule = next(r for r in RULES if r.feature == "consistency_score")
-    assert rule.is_weak(0.2) is True
-    assert rule.is_weak(0.4) is False  # at threshold — not weak
-    assert rule.is_weak(0.8) is False
-
-
 # ── Test 2: Health endpoint returns expected shape ────────────────────
 
 

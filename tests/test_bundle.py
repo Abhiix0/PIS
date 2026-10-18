@@ -145,3 +145,20 @@ def test_identical_bundles_built_back_to_back_get_distinct_versions(registry):
     _artifacts(src)
     a, b = bundle.create_candidate(src), bundle.create_candidate(src)
     assert a != b and (bundle.BUNDLES_DIR / a).is_dir() and (bundle.BUNDLES_DIR / b).is_dir()
+
+
+def test_bootstrap_activates_as_local_bootstrap_and_is_refused_when_deployed(registry, monkeypatch):
+    import config
+
+    v = _candidate(registry)
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE model_versions SET status='retired' WHERE status='active'")
+    monkeypatch.setattr(config, "APP_ENV", "production")
+    with pytest.raises(BundleError, match="refused"):
+        bundle.bootstrap()
+    monkeypatch.setattr(config, "APP_ENV", "local")
+    bundle.bootstrap()
+    assert bundle.active_version() == v
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT approved_by FROM model_versions WHERE version=%s", (v,))
+        assert cur.fetchone()[0] == "local-bootstrap"

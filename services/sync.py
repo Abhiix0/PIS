@@ -219,12 +219,6 @@ def _store(run_id: str, pid: str, provider: str, observations) -> tuple[int, int
     return created, rejected
 
 
-def run_sync(user_id: str, provider: str) -> dict:
-    run_id, *job = _begin_run(user_id, provider)
-    execute_run(run_id, provider, *job)
-    return get_run(user_id, run_id)
-
-
 def start_sync(user_id: str, provider: str) -> tuple[str, tuple]:
     """Guards + 'running' row only; the caller runs execute_run later (e.g. as a background task)."""
     run_id, *job = _begin_run(user_id, provider)

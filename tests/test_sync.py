@@ -15,6 +15,7 @@ from ingest.provider import Observation, ProviderError
 from tests.conftest import bearer, make_token
 
 client = TestClient(app)
+V1 = "/api/v1"
 PUSHED = datetime(2024, 3, 1, 12, tzinfo=UTC)
 
 
@@ -44,11 +45,15 @@ class User:
     def call(self, method, path, **kw):
         return getattr(client, method)(path, headers=self.h, **kw)
 
-    def sync(self):
-        return self.call("post", "/integrations/github/sync")
+    def sync(self, provider="github"):
+        """v1 starts a run (202); TestClient has run the background task by then, so return the finished run."""
+        r = self.call("post", f"{V1}/integrations/{provider}/sync")
+        if r.status_code != 202:
+            return r
+        return self.call("get", r.headers["Location"])
 
     def runs(self):
-        return self.call("get", "/integrations/github/sync-runs").json()
+        return self.call("get", f"{V1}/sync-runs?provider=github").json()["items"]
 
 
 @pytest.fixture(autouse=True)
@@ -59,8 +64,8 @@ def _no_cooldown(monkeypatch):
 @pytest.fixture
 def user():
     u = User()
-    assert u.call("post", "/profiles", json={"display_name": "T"}).status_code == 201
-    assert u.call("put", "/integrations/github", json={"username": "octo"}).status_code == 200
+    assert u.call("put", f"{V1}/me/profile", json={"display_name": "T"}).status_code == 201
+    assert u.call("put", f"{V1}/integrations/github", json={"username": "octo"}).status_code == 200
     return u
 
 
@@ -132,11 +137,11 @@ def test_failed_sync_keeps_last_known_good_and_writes_nothing(user, err, code):
         run = user.sync().json()
     assert run["status"] == "failed" and run["safe_error_code"] == code
     assert observations_of(user) == before
-    conn = user.call("get", "/integrations").json()[0]
+    conn = user.call("get", f"{V1}/integrations").json()["items"][0]
     assert conn["status"] == "error" and conn["last_success_at"] is not None
     with with_adapter(gh(("a", 6))):  # recovery resets the connection
         assert user.sync().json()["status"] == "succeeded"
-    assert user.call("get", "/integrations").json()[0]["status"] == "connected"
+    assert user.call("get", f"{V1}/integrations").json()["items"][0]["status"] == "connected"
 
 
 def test_partial_provider_result_is_marked_partial(user):
@@ -250,28 +255,34 @@ def test_stale_running_row_is_abandoned_not_blocking_forever(user):
 def test_guards_without_connection_or_profile():
     u = User()
     assert u.sync().status_code == 404  # no connection
-    assert u.call("put", "/integrations/github", json={"username": "octo"}).status_code == 200
+    assert u.call("put", f"{V1}/integrations/github", json={"username": "octo"}).status_code == 200
     assert u.sync().status_code == 409  # connection but no profile
 
 
 def test_leetcode_is_disabled_by_default():
     u = User()
     assert config.LEETCODE_INTEGRATION_ENABLED is False
-    assert u.call("put", "/integrations/leetcode", json={"username": "someone"}).status_code == 503
-    assert u.call("post", "/integrations/leetcode/sync").status_code == 503
+    assert (
+        u.call("put", f"{V1}/integrations/leetcode", json={"username": "someone"}).status_code
+        == 503
+    )
+    assert u.sync("leetcode").status_code == 503
 
 
 def test_leetcode_sync_stores_aggregates_without_event_times_when_enabled(monkeypatch):
     monkeypatch.setattr(config, "LEETCODE_INTEGRATION_ENABLED", True)
     u = User()
-    u.call("post", "/profiles", json={"display_name": "T"})
-    assert u.call("put", "/integrations/leetcode", json={"username": "someone"}).status_code == 200
+    u.call("put", f"{V1}/me/profile", json={"display_name": "T"})
+    assert (
+        u.call("put", f"{V1}/integrations/leetcode", json={"username": "someone"}).status_code
+        == 200
+    )
     lc = [
         Observation("leetcode", f"leetcode_solved_{d}", n)
         for d, n in (("easy", 5), ("medium", 0), ("hard", 1))
     ]
     with patch("ingest.leetcode_api.fetch_leetcode_observations", return_value=(lc, False)):
-        run = u.call("post", "/integrations/leetcode/sync").json()
+        run = u.sync("leetcode").json()
     assert run["status"] == "succeeded"
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -283,17 +294,19 @@ def test_leetcode_sync_stores_aggregates_without_event_times_when_enabled(monkey
 
 @pytest.mark.parametrize("name", ["", "../x", "a b", "-lead", "x" * 70])
 def test_bad_usernames_rejected(name):
-    assert User().call("put", "/integrations/github", json={"username": name}).status_code in (422,)
+    assert User().call("put", f"{V1}/integrations/github", json={"username": name}).status_code in (
+        422,
+    )
 
 
 def test_changing_username_starts_a_new_connection_and_keeps_history(user):
     with with_adapter(gh(("a", 1))):
         user.sync()
     assert (
-        user.call("put", "/integrations/github", json={"username": "someone-else"}).status_code
+        user.call("put", f"{V1}/integrations/github", json={"username": "someone-else"}).status_code
         == 200
     )
-    conns = user.call("get", "/integrations").json()
+    conns = user.call("get", f"{V1}/integrations").json()["items"]
     assert [c["external_username"] for c in conns] == ["someone-else"]
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -310,16 +323,16 @@ def test_other_users_cannot_see_or_trigger_my_runs(user):
     with with_adapter(gh(("a", 1))):
         user.sync()
     other = User()
-    assert other.call("get", "/integrations").json() == []
-    assert other.call("get", "/integrations/github/sync-runs").json() == []
+    assert other.call("get", f"{V1}/integrations").json()["items"] == []
+    assert other.call("get", f"{V1}/sync-runs?provider=github").json()["items"] == []
     assert other.sync().status_code == 404
 
 
 def test_anonymous_is_rejected():
-    assert client.get("/integrations").status_code == 401
-    assert client.put("/integrations/github", json={"username": "x"}).status_code == 401
-    assert client.post("/integrations/github/sync").status_code == 401
-    assert client.get("/integrations/github/sync-runs").status_code == 401
+    assert client.get(f"{V1}/integrations").status_code == 401
+    assert client.put(f"{V1}/integrations/github", json={"username": "x"}).status_code == 401
+    assert client.post(f"{V1}/integrations/github/sync").status_code == 401
+    assert client.get(f"{V1}/sync-runs?provider=github").status_code == 401
 
 
 def test_unexpected_adapter_crash_still_closes_the_run(user):

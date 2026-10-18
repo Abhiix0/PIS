@@ -1,5 +1,5 @@
 # PIS — Project Commands
-.PHONY: lint test-unit migrate up up-detached down down-clean restart test test-local seed pipeline-all health logs clean
+.PHONY: lint test-unit migrate up up-detached down down-clean restart test test-local health logs clean
 
 up:
 	docker-compose up --build
@@ -23,7 +23,7 @@ lint:
 	ruff check . && ruff format --check . && mypy
 
 test-unit:
-	pytest tests/test_core.py tests/test_insights.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_migrate.py -v --tb=short
+	pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_migrate.py -v --tb=short
 
 migrate:
 	docker-compose exec api python -m ingest.migrate
@@ -31,15 +31,6 @@ migrate:
 # needs only DATABASE_URL + TEST_ADMIN_DATABASE_URL (role with CREATEDB); tests build a throwaway DB
 test-local:
 	pytest tests/ -v --tb=short
-
-seed:
-	docker-compose exec api python -m ingest.coding
-	docker-compose exec api python -m ingest.github
-
-pipeline-all:
-	curl -s -X POST http://localhost:8000/pipeline/batch \
-		-H "Authorization: Bearer $(PIS_API_TOKEN)" -H "Content-Type: application/json" \
-		-d '{"student_ids":[1,2,3,4,5,6,7,8]}' | python -m json.tool
 
 health:
 	curl -s http://localhost:8000/health/detailed | python -m json.tool

@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 
+import config
 from ingest.db_connection import get_connection
 
 BUNDLES_DIR = Path("models/bundles")
@@ -37,6 +38,7 @@ TARGET_SEMANTICS = (
     "(synthetic labels); NOT a placement or hiring outcome"
 )
 FILES = ("regressor.pkl", "classifier.pkl", "scaler.pkl", "feature_importances.json")
+BOOTSTRAP_OPERATOR = "local-bootstrap"
 CATEGORIES = {"Ready", "Near Ready", "Needs Improvement"}
 
 
@@ -249,7 +251,11 @@ def active_version() -> str | None:
 
 
 def bootstrap() -> None:
-    """First-boot/demo only: with no active model, activate the newest passing candidate."""
+    """Local/demo first boot only: with no active model, activate the newest passing candidate as 'local-bootstrap'."""
+    if config.is_deployed():
+        raise BundleError(
+            "bootstrap is refused in staging/production: approve and activate explicitly"
+        )
     if active_version():
         return
     with get_connection() as conn, conn.cursor() as cur:
@@ -259,8 +265,8 @@ def bootstrap() -> None:
         row = cur.fetchone()
     if not row:
         raise BundleError("no passing candidate to bootstrap")
-    approve(row[0], "bootstrap", "first-boot activation")
-    activate(row[0], "bootstrap")
+    approve(row[0], BOOTSTRAP_OPERATOR, "first-boot activation")
+    activate(row[0], BOOTSTRAP_OPERATOR)
 
 
 if __name__ == "__main__":

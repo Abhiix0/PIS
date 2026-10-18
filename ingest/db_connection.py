@@ -53,3 +53,11 @@ def query_df(conn, sql: str, params=None) -> pd.DataFrame:
     with conn.cursor() as cur:
         cur.execute(sql, params)
         return pd.DataFrame(cur.fetchall(), columns=[c.name for c in cur.description])
+
+
+def fetch_all(sql: str, params=None) -> list[dict]:
+    """One read-only query -> list of column-keyed dicts (replaces the connect/cursor/zip boilerplate in routers)."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(sql, params)
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]

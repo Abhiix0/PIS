@@ -35,18 +35,5 @@ services:
       - ./models:/app/models
       - ./features:/app/features
 
-  dashboard:
-    build:
-      context: .
-      dockerfile: dashboard/Dockerfile
-    ports:
-      - "8501:8501"
-    environment:
-      API_URL: http://api:8000
-      PIS_API_TOKEN: ${PIS_API_TOKEN:-}
-    depends_on:
-      - api
-    restart: on-failure
-
 volumes:
   postgres_data:

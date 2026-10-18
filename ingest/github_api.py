@@ -173,21 +173,3 @@ def fetch_github_observations(username: str) -> tuple[list[Observation], bool]:
             )
         )
     return obs, partial
-
-
-def fetch_github_data(username: str) -> list[dict]:
-    """Legacy `students` shape: [{repo_name, commits, commit_date}] for repos with commits.
-
-    commit_date is the repo's last push date, not a commit date (see docs/phase6/ingestion.md).
-    Raises ProviderError on failure.
-    """
-    obs, _ = fetch_github_observations(username)
-    return [
-        {
-            "repo_name": o.source_object_id,
-            "commits": int(o.value_num),
-            "commit_date": o.event_at.date(),
-        }
-        for o in obs
-        if o.observation_type == "github_repo_commit_count" and o.value_num > 0 and o.event_at
-    ]

@@ -10,21 +10,19 @@ Guidance for Claude Code in this repository. Verify files and commands against t
 
 ## Product and stack
 
-Placement Intelligence System (PIS) scores student **placement-readiness** from coding (LeetCode) and GitHub activity plus CGPA. PostgreSQL 15 (SQL feature engineering) → FastAPI (`app/`) → Streamlit dashboard (`dashboard/`, pure HTTP client of the API, no DB access). Python 3.11, scikit-learn RandomForest, pandas, `psycopg2` only (no SQLAlchemy usage, although it is in `requirements.txt`) via one `ThreadedConnectionPool` in `ingest/db_connection.py`. Docker Compose: `db`, `api`, `dashboard`.
+Placement Intelligence System (PIS) scores student **placement-readiness** from coding (LeetCode) and GitHub activity plus CGPA. PostgreSQL 15 (SQL feature engineering) → FastAPI (`app/`) → the desktop client (`apps/desktop/`, HTTP client of `/api/v1`). Python 3.11, scikit-learn RandomForest, pandas, `psycopg2` only (no SQLAlchemy usage, although it is in `requirements.txt`) via one `ThreadedConnectionPool` in `ingest/db_connection.py`. Docker Compose: `db`, `api`.
 
 ## Repository map
 
 | Path | Role |
 |---|---|
-| `app/` | FastAPI app (`main.py` lifespan fails fast on DB/model problems), `schemas.py`, `routers/` (students, ingest, predictions, insights, features, pipeline, admin) |
-| `services/sync.py` | Real-user sync lifecycle (`sync_runs`, `source_observations`, quarantine); routes in `app/routers/integrations.py` |
-| `services/pipeline.py` | Legacy per-student orchestration: coding ingest → GitHub ingest → feature SQL → predict → insights |
-| `ingest/` | `coding.py`/`github.py` (synthetic generators), `leetcode_api.py`/`github_api.py` (provider adapters -> typed `Observation`, raise `ProviderError`; `provider.py`), `validators.py`, `db_connection.py` |
+| `app/` | FastAPI app (`main.py` lifespan fails fast on DB/model problems), `routers/v1.py` (`/api/v1/*` + `/auth/logout`), `routers/admin.py` (operator). Route table: `docs/architecture/api-surface.md`; all errors use one `{error:{code,message,request_id}}` envelope |
+| `services/sync.py` | Real-user sync lifecycle (`sync_runs`, `source_observations`, quarantine); routes in `app/routers/v1.py` |
+| `services/privacy.py` | Export, account deletion, audit events |
+| `ingest/` | `leetcode_api.py`/`github_api.py` (provider adapters -> typed `Observation`, raise `ProviderError`; `provider.py`), `validators.py`, `db_connection.py` (`get_connection`, `fetch_all` for read-only dict queries) |
 | `features/compute.py` | Runs feature SQL, loads, MinMax-scales, writes `models/scaler.pkl` and `features/*.csv` |
-| `sql/` | `migrations/` (ordered; the only schema path, run by `python -m ingest.migrate`), `seed.sql` (demo data, local/test only), `feature_engineering.sql` (full table), `feature_engineering_single.sql` (per student), `ranking.sql` |
-| `ml/` | `labels.py` (constructed labels), `train.py`, `predict.py` |
-| `insights/` | `rules.py` (raw-value thresholds), `engine.py` (ranking by feature importance, composite patterns) |
-| `dashboard/` | `app.py`, `api_client.py` (all HTTP calls live here) |
+| `sql/` | `migrations/` (ordered; the only schema path, run by `python -m ingest.migrate`), `seed.sql` (demo data, local/test only), `feature_engineering.sql` (full table) |
+| `ml/` | `labels.py` (constructed labels), `train.py`, `bundle.py` (registry; `bootstrap` = local-only activation as `local-bootstrap`), `predict.py` (batch, boot-time) |
 | `models/` | `bundles/<version>/` (immutable model bundles, registry in `model_versions`; `ml/bundle.py`), `staging/` for training output. Legacy top-level `.pkl` are unused |
 | `tests/` | pytest; see below |
 | `venv/` | Local virtualenv, git-ignored; ignore it |
@@ -35,37 +33,36 @@ Verified by inspecting files unless marked **(ran)**.
 
 ```bash
 cp .env.example .env            # DATABASE_URL required; GITHUB_TOKEN optional; AUTH_ISSUER/AUTH_AUDIENCE/AUTH_JWKS_URL required in staging/production
-make up                         # docker-compose up --build (API :8000/docs, dashboard :8501)
+make up                         # docker-compose up --build (API :8000/docs)
 make down | make down-clean     # stop | stop and wipe DB volume
 make test                       # pytest inside api container (docker-compose exec)
 make test-local                 # pytest tests/ -v --tb=short (needs live DB + models/)
-make pipeline-all               # POST /pipeline/batch for students 1-8
-make health | make logs | make seed
+make health | make logs
 python -m features.compute && python -m ml.train && python -m ml.bundle bootstrap && python -m ml.predict   # entrypoint.sh boot order (train makes a candidate; activate via ml.bundle), then uvicorn app.main:app
-# No DB/models needed (23 passed, using venv/Scripts/python.exe -m pytest) (ran):
-pytest tests/test_core.py tests/test_insights.py tests/test_github_api.py tests/test_leetcode_api.py
+# No DB/models needed (using venv/Scripts/python.exe -m pytest):
+pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py
 ```
 
 `make up`, `make test`, `make test-local`, and the module commands were **not** run in Phase 0 (no live DB). The system `python` on the dev machine lacks `psycopg2`; use `venv/Scripts/python.exe`.
 
 ## Execution flow
 
-`POST /pipeline/{id}` (`app/routers/pipeline.py`, 5-minute cooldown unless `?force_refresh=true`) → `services/pipeline.run`: ingest coding and GitHub (real API if username set and 24h sync stale, otherwise synthetic) → `features.compute.run_feature_sql_for_student` → `ml.predict.predict` (scaler + RF regressor/classifier, upserts `predictions`, throttled `prediction_history`) → `insights.engine.InsightEngine`.
+Real users: `PUT /api/v1/integrations/{provider}` → `POST .../sync` (202, background `services.sync.execute_run`) → `source_observations` → `POST /api/v1/assessments` snapshots evidence (`insufficient_evidence`, no score). Operators: `/admin/retrain` → candidate bundle → approve → activate. Boot (`entrypoint.sh`, local only): migrate → `features.compute` → `ml.train` → `ml.bundle bootstrap` → `ml.predict`.
 
 ## Conventions
 
-- Keep `sql/feature_engineering.sql` and `_single.sql` logic identical. Adding a feature touches SQL, `features/compute.py` (`SCALE_COLS`, scaler), `ml/labels.py`, `ml/train.py`, `ml/predict.py`, `insights/rules.py`, `schemas.py`, and the `features` table.
+- Adding a feature touches `sql/feature_engineering.sql`, `features/compute.py` (`SCALE_COLS`, scaler), `ml/labels.py`, `ml/train.py`, `ml/predict.py`, and the `features` table.
 - Schema changes = a new numbered file in `sql/migrations/` (applied in filename order, recorded in `schema_migrations`; never edit an applied file). No other schema path exists. Config lives in `config.py` (`APP_ENV`, `validate()`).
-- Dashboard calls go through `dashboard/api_client.py` only.
+- A new route needs a row in `docs/architecture/api-surface.md` (a test compares it to `app.routes`) and a test.
 - Match surrounding style (psycopg2 `get_connection()` context manager, Pydantic schemas, flat routers). No wholesale rewrites.
-- Tests: pytest, external HTTP mocked with `unittest.mock`; API tests (`test_api.py`, `test_pipeline.py`) hit a real DB migrated with `python -m ingest.migrate --seed`; `tests/test_migrate.py` DB tests need `TEST_ADMIN_DATABASE_URL` (a role that can CREATE DATABASE) and use a throwaway database. New logic gets a test; schema changes need a clean-database check.
+- Tests: pytest, external HTTP mocked with `unittest.mock`; API tests (`test_api_v1.py`, `test_sync.py`, `test_auth.py`) hit a real DB migrated with `python -m ingest.migrate --seed`; `tests/test_migrate.py` DB tests need `TEST_ADMIN_DATABASE_URL` (a role that can CREATE DATABASE) and use a throwaway database. New logic gets a test; schema changes need a clean-database check.
 - Workflow: inspect → plan → implement → test → review. Report only checks you actually ran.
 
 ## Mandatory safeguards
 
-- **Synthetic data**: random generators exist in `ingest/coding.py` and `ingest/github.py`; they run only for legacy demo students with no username (`services/pipeline.py`, `/ingest/{coding,github}/{id}`), and the `provenance` column on `coding_activity`/`github_activity` defaults to `synthetic`. A failed provider call never falls back to synthetic data. Never add hidden fallbacks; synthetic data belongs only in labelled demo/test paths. Do not describe synthetic-derived results as the user's real activity.
+- **Synthetic data**: the random generators were removed; the only synthetic data is `sql/seed.sql` (local/test), and the `provenance` column on `coding_activity`/`github_activity` defaults to `synthetic`. A failed provider call never falls back to synthetic data. Never add hidden fallbacks; synthetic data belongs only in labelled demo/test paths. Do not describe synthetic-derived results as the user's real activity.
 - **Provenance**: real-user provider data is stored only as `source_observations` (migration 005) with `provenance`, `granularity`, `event_at_precision`, and a `sync_run_id`; LeetCode is aggregate-only (no solve dates, disabled unless `LEETCODE_INTEGRATION_ENABLED`). Never invent exact timestamps from aggregates; GitHub `commit_date`/`event_at` is the repo's `pushed_at` (precision `repo_push`), not a commit date. Record the source of every datum. Feature definitions: `docs/data-dictionary/features.md`.
 - **ML claims**: labels are a weighted formula of the same features plus fixed-seed Gaussian noise (σ=5). The models learn that formula, not placement outcomes, on ~8 seed students. Never claim they predict hiring/placement; call the output a readiness *proxy score*. Any ML change needs documented baseline, experiment, and evaluation; promote models only after validation and smoke test with a rollback path.
-- **Security**: `app/auth.py` verifies IdP-issued RS256 JWTs (see `docs/phase5/auth-architecture.md`); every route except `/health*` requires a token. Legacy `students`-keyed routes and `/admin/*` are operator-only (role claim `pis_operator`); user data lives in `profiles`, scoped by `user_id` in the SQL itself. Never expose one user's records via an identifier alone. Real-user ingestion runs only through `/integrations/*` (owner-scoped, public usernames, per-connection cooldown; see `docs/phase6/ingestion.md`). staging/production refuse to start without AUTH_* settings.
+- **Security**: `app/auth.py` verifies IdP-issued RS256 JWTs (see `docs/phase5/auth-architecture.md`); every route except `/health*` requires a token. `/admin/*` is operator-only (role claim `pis_operator`); user data lives in `profiles`, scoped by `user_id` in the SQL itself. Never expose one user's records via an identifier alone. Real-user ingestion runs only through `/api/v1/integrations/*` (owner-scoped, public usernames, per-connection cooldown; see `docs/phase6/ingestion.md`). staging/production refuse to start without AUTH_* settings.
 - **Secrets**: never commit `.env`, tokens, or admin keys; never print them; never embed server secrets in any client bundle. The `Dockerfile` does `COPY . .` and there is no `.dockerignore`, so a local `.env` is copied into the image — do not push such images.
 - Do not add an LLM, vector DB, queue, Redis, Kubernetes, microservices, or new model family without a written requirement and rationale.

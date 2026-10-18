@@ -98,8 +98,9 @@ def test_validation_error_envelope_does_not_echo_input():
     assert "99" not in str(r.json()["error"]["message"])
 
 
-def test_legacy_routes_keep_detail_shape():
-    assert client.get("/me").json() == {"detail": "Not authenticated"}
+def test_unknown_and_unversioned_paths_use_the_same_envelope():
+    error_of(client.get("/me"), 404, "not_found")  # legacy path is gone
+    error_of(client.get("/students"), 404, "not_found")
 
 
 def test_oversize_body_is_enveloped():

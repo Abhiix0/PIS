@@ -11,10 +11,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, current_principal, expensive
-from ingest.db_connection import get_connection
+from ingest.db_connection import fetch_all, get_connection
 from services import privacy, sync
 
 router = APIRouter(prefix="/api/v1")
+session_router = APIRouter(tags=["Session"])  # unprefixed: the desktop client calls /auth/logout
 Provider = Literal["github", "leetcode"]
 EVIDENCE_VERSION = "evidence-v1"
 NO_SCORE_REASON = (
@@ -30,8 +31,7 @@ def _dicts(cur) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
-def _one(cur, what: str) -> dict:
-    rows = _dicts(cur)
+def _one(rows: list[dict], what: str) -> dict:
     if not rows:
         raise HTTPException(status_code=404, detail=f"{what} not found")
     return rows[0]
@@ -55,9 +55,7 @@ _PROFILE = "id::text AS id, display_name, branch, graduation_year, cgpa::float A
 
 @router.get("/me", tags=["Profile"])
 def me(p: Principal = Depends(current_principal)):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT {_PROFILE} FROM profiles WHERE user_id = %s", (p.user_id,))
-        rows = _dicts(cur)
+    rows = fetch_all(f"SELECT {_PROFILE} FROM profiles WHERE user_id = %s", (p.user_id,))
     return {
         "user_id": p.user_id,
         "is_operator": p.is_operator,
@@ -79,6 +77,16 @@ def put_profile(body: ProfileIn, response: Response, p: Principal = Depends(curr
         row = _dicts(cur)[0]
     response.status_code = 201 if row.pop("inserted") else 200
     return row
+
+
+@session_router.post("/auth/logout", status_code=204)
+def logout(p: Principal = Depends(current_principal)):
+    """Revoke every token issued to this user up to now."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET sessions_valid_after = now(), updated_at = now() WHERE id = %s",
+            (p.user_id,),
+        )
 
 
 # ── Integrations and sync ──────────────────────────────────────────────
@@ -159,8 +167,8 @@ def get_sync_run(run_id: str, p: Principal = Depends(current_principal)):
 @router.get("/me/data-quality", tags=["Data quality"])
 def data_quality(p: Principal = Depends(current_principal)):
     """Per connected provider: last run outcome plus how many records were quarantined, by rule code."""
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
+    return {
+        "items": fetch_all(
             """
             SELECT c.provider, c.external_username, c.status AS connection_status, c.last_success_at,
                    (SELECT row_to_json(x) FROM (SELECT r.id::text AS id, r.status, r.completed_at, r.safe_error_code,
@@ -174,7 +182,7 @@ def data_quality(p: Principal = Depends(current_principal)):
         """,
             (p.user_id,),
         )
-        return {"items": _dicts(cur)}
+    }
 
 
 # ── Assessments ────────────────────────────────────────────────────────
@@ -256,34 +264,35 @@ def list_assessments(
     offset: int = Query(0, ge=0, le=100_000),
     p: Principal = Depends(current_principal),
 ):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            f"SELECT {_ASSESSMENT} FROM assessments WHERE profile_id IN ({_MY_PROFILE}) "
-            "ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
-            (p.user_id, limit, offset),
-        )
-        return {"items": _dicts(cur), "limit": limit, "offset": offset}
+    items = fetch_all(
+        f"SELECT {_ASSESSMENT} FROM assessments WHERE profile_id IN ({_MY_PROFILE}) "
+        "ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
+        (p.user_id, limit, offset),
+    )
+    return {"items": items, "limit": limit, "offset": offset}
 
 
 @router.get("/assessments/{assessment_id}", tags=["Assessments"])
 def get_assessment(assessment_id: str, p: Principal = Depends(current_principal)):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
+    return _one(
+        fetch_all(
             f"SELECT {_ASSESSMENT} FROM assessments WHERE id::text = %s AND profile_id IN ({_MY_PROFILE})",
             (assessment_id, p.user_id),
-        )
-        return _one(cur, "Assessment")
+        ),
+        "Assessment",
+    )
 
 
 @router.get("/assessments/{assessment_id}/evidence", tags=["Assessments"])
 def get_assessment_evidence(assessment_id: str, p: Principal = Depends(current_principal)):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
+    return _one(
+        fetch_all(
             "SELECT id::text AS assessment_id, evidence FROM assessments "
             f"WHERE id::text = %s AND profile_id IN ({_MY_PROFILE})",
             (assessment_id, p.user_id),
-        )
-        return _one(cur, "Assessment")
+        ),
+        "Assessment",
+    )
 
 
 # ── Privacy: export, deletion, consent ─────────────────────────────────
@@ -306,13 +315,13 @@ def request_deletion(confirm: bool = Query(False), p: Principal = Depends(curren
 
 @router.get("/me/data-requests", tags=["Privacy"])
 def list_data_requests(p: Principal = Depends(current_principal)):
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
+    return {
+        "items": fetch_all(
             "SELECT id::text AS id, kind, status, requested_at, updated_at FROM data_requests "
             "WHERE user_id = %s ORDER BY requested_at DESC LIMIT 50",
             (p.user_id,),
         )
-        return {"items": _dicts(cur)}
+    }
 
 
 class ConsentIn(BaseModel):

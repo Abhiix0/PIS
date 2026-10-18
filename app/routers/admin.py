@@ -6,7 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import Principal, expensive, require_operator
-from ingest.db_connection import get_connection
+from app.logger import logger
+from ingest.db_connection import fetch_all, get_connection
 from ml import bundle
 from services import privacy
 
@@ -62,10 +63,13 @@ def _run_retrain():
         }
 
     except Exception as e:
+        logger.error(
+            f"retrain failed: {type(e).__name__}: {e}"
+        )  # raw message stays in the log, not the API
         _retrain_status = {
             "state": "failed",
             "last_ran": datetime.now(UTC).isoformat(),
-            "error": str(e),
+            "error": type(e).__name__,
             "metrics": {},
         }
         # The active model is untouched
@@ -147,34 +151,20 @@ def rollback_model(p: Principal = Depends(require_operator)):
 @router.get("/audit-events")
 def audit_events(limit: int = 100):
     """Newest first: action, actor ids and target only. Never personal data or secrets."""
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT id::text, action, actor_user_id::text, actor_subject, target, created_at FROM audit_events "
-            "ORDER BY created_at DESC LIMIT %s",
-            (max(1, min(limit, 500)),),
-        )
-        keys = ("id", "action", "actor_user_id", "actor_subject", "target", "created_at")
-        return [dict(zip(keys, r)) for r in cur.fetchall()]
+    return fetch_all(
+        "SELECT id::text AS id, action, actor_user_id::text AS actor_user_id, actor_subject, target, created_at "
+        "FROM audit_events ORDER BY created_at DESC LIMIT %s",
+        (max(1, min(limit, 500)),),
+    )
 
 
 @router.get("/sync-failures")
 def sync_failures(limit: int = 50):
     """Failed/partial sync runs with sanitized diagnostics: provider, status, safe error code, counts. No user,
     username or profile fields are selected, so operators cannot browse personal data through this."""
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT r.id::text, c.provider, r.status, r.safe_error_code, r.records_rejected, r.started_at, "
-            "r.completed_at FROM sync_runs r JOIN integration_connections c ON c.id = r.connection_id "
-            "WHERE r.status IN ('failed','partial') ORDER BY r.started_at DESC LIMIT %s",
-            (max(1, min(limit, 200)),),
-        )
-        keys = (
-            "id",
-            "provider",
-            "status",
-            "safe_error_code",
-            "records_rejected",
-            "started_at",
-            "completed_at",
-        )
-        return [dict(zip(keys, r)) for r in cur.fetchall()]
+    return fetch_all(
+        "SELECT r.id::text AS id, c.provider, r.status, r.safe_error_code, r.records_rejected, r.started_at, "
+        "r.completed_at FROM sync_runs r JOIN integration_connections c ON c.id = r.connection_id "
+        "WHERE r.status IN ('failed','partial') ORDER BY r.started_at DESC LIMIT %s",
+        (max(1, min(limit, 200)),),
+    )
