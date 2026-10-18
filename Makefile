@@ -25,6 +25,7 @@ test-unit:
 migrate:
 	docker-compose exec api python -m ingest.migrate
 
+# needs only DATABASE_URL + TEST_ADMIN_DATABASE_URL (role with CREATEDB); tests build a throwaway DB
 test-local:
 	pytest tests/ -v --tb=short
 

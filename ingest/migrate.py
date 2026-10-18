@@ -36,7 +36,7 @@ def pending(conn, directory: Path = MIGRATIONS_DIR) -> list[str]:
 
 def migrate(dsn: str, directory: Path = MIGRATIONS_DIR, seed: bool = False) -> list[str]:
     """Apply pending migrations; return the names applied. Raises on any SQL error."""
-    conn = psycopg2.connect(dsn)
+    conn = psycopg2.connect(dsn, client_encoding="UTF8")  # files are UTF-8; Windows defaults to cp1252
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_advisory_lock(%s)", (_LOCK_ID,))

@@ -121,3 +121,11 @@ def test_insufficient_inputs_give_no_score():
     assert "consistency_score" in _insufficient_reason({**ok, "consistency_score": None})
     assert "non-finite" in _insufficient_reason({**ok, "cgpa": float("nan")})
     assert "CGPA" in _insufficient_reason({**ok, "cgpa": 11.0})
+
+
+def test_identical_bundles_built_back_to_back_get_distinct_versions(registry):
+    src = registry / "same"
+    src.mkdir()
+    _artifacts(src)
+    a, b = bundle.create_candidate(src), bundle.create_candidate(src)
+    assert a != b and (bundle.BUNDLES_DIR / a).is_dir() and (bundle.BUNDLES_DIR / b).is_dir()

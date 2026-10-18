@@ -135,7 +135,13 @@ def _db_ready():
         return False
 
 
-db = pytest.mark.skipif(not _db_ready(), reason="needs migrated DB (python -m ingest.migrate)")
+@pytest.fixture
+def _need_db():
+    if not _db_ready():  # checked per test so the session DB fixture (conftest) is already in place
+        pytest.skip("needs migrated DB (python -m ingest.migrate)")
+
+
+db = pytest.mark.usefixtures("_need_db")
 
 
 @db

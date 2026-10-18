@@ -15,6 +15,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,7 +94,9 @@ def smoke_test(b: Bundle) -> dict:
 def create_candidate(src_dir: Path, metrics: dict | None = None) -> str:
     """Freeze the artifacts in src_dir into a new bundle and register it. Never activates anything."""
     files = {n: _sha(Path(src_dir) / n) for n in FILES}
-    version = f"v{datetime.now(timezone.utc):%Y%m%d%H%M%S}-{hashlib.sha256(json.dumps(files).encode()).hexdigest()[:8]}"
+    # microseconds + random suffix: identical artifacts built back-to-back must not collide
+    version = (f"v{datetime.now(timezone.utc):%Y%m%d%H%M%S%f}-"
+               f"{hashlib.sha256(json.dumps(files).encode()).hexdigest()[:8]}-{uuid.uuid4().hex[:6]}")
     dest = BUNDLES_DIR / version
     dest.mkdir(parents=True)
     for n in FILES:
