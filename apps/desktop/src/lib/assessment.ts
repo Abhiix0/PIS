@@ -101,3 +101,6 @@ export function compare(a: { a: Assessment; ev: Evidence }, b: { a: Assessment; 
   }));
   return { comparable: true, notes, deltas };
 }
+
+// Dev-only demo mode (src/api/mock.ts): every screen then labels its data as sample data.
+export const DEMO = import.meta.env.DEV && import.meta.env.VITE_MOCK_API === "1";

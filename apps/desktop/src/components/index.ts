@@ -11,6 +11,7 @@ export * from "./ErrorState";
 export * from "./Input";
 export * from "./Select";
 export * from "./Skeleton";
+export * from "./PageHeader";
 export * from "./Stat";
 export * from "./Table";
 export * from "./Tabs";

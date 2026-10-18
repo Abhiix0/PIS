@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { getEvidence, listAssessments, type Assessment } from "../api/v1";
-import { Banner, Button, EmptyState, ErrorState, Loading, Table } from "../components";
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Loading,
+  PageHeader,
+  Table,
+} from "../components";
 import { compare, type Comparison } from "../lib/assessment";
 import { friendly } from "./Dashboard";
 
@@ -34,8 +44,11 @@ export default function History() {
   if (!items.length)
     return (
       <>
-        <h1>History</h1>
-        <EmptyState title="No assessments yet" />
+        <PageHeader title="History" />
+        <EmptyState
+          title="No assessments yet"
+          hint="Run an assessment from the Overview to start your history."
+        />
       </>
     );
 
@@ -58,24 +71,37 @@ export default function History() {
   }
   return (
     <>
-      <h1>History</h1>
-      <ul>
-        {items.map((a) => (
-          <li key={a.id}>
-            <label>
-              <input type="checkbox" checked={pick.includes(a.id)} onChange={() => toggle(a.id)} />{" "}
-              {new Date(a.created_at).toLocaleString()} · {a.assessment_type.replace("_", " ")} · model{" "}
-              {a.model_version ?? "none"}
-            </label>
-          </li>
-        ))}
-      </ul>
-      <Button disabled={pick.length !== 2} onClick={() => void run()}>
-        Compare selected (pick 2)
-      </Button>
+      <PageHeader
+        title="History"
+        sub="Each assessment is a saved snapshot. Pick two to compare."
+        actions={
+          <Button disabled={pick.length !== 2} onClick={() => void run()}>
+            Compare selected (pick 2)
+          </Button>
+        }
+      />
+      <Card>
+        <ul className="plain">
+          {items.map((a) => (
+            <li key={a.id}>
+              <label className="check">
+                <input type="checkbox" checked={pick.includes(a.id)} onChange={() => toggle(a.id)} />
+                <span>
+                  {new Date(a.created_at).toLocaleString()} · model {a.model_version ?? "none"}{" "}
+                  <Badge>{a.assessment_type.replace("_", " ")}</Badge>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </Card>
       {cmp && (
-        <section aria-label="Comparison">
-          {!cmp.comparable && <p role="alert">These snapshots cannot be compared. {cmp.notes.join(" ")}</p>}
+        <Card aria-label="Comparison">
+          {!cmp.comparable && (
+            <p role="alert" className="err">
+              ! These snapshots cannot be compared. {cmp.notes.join(" ")}
+            </p>
+          )}
           {cmp.comparable && (
             <>
               {cmp.notes.map((t) => (
@@ -105,7 +131,7 @@ export default function History() {
               )}
             </>
           )}
-        </section>
+        </Card>
       )}
     </>
   );

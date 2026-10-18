@@ -1,4 +1,4 @@
-import { EmptyState, ErrorState, Loading } from "../components";
+import { Card, EmptyState, ErrorState, Loading, PageHeader } from "../components";
 import { DISCLAIMER, priorities } from "../lib/assessment";
 import { useLatest } from "./useLatest";
 
@@ -9,28 +9,32 @@ export default function Plan() {
   if (l.s === "empty")
     return (
       <>
-        <h1>Development plan</h1>
+        <PageHeader title="Development plan" />
         <EmptyState title="No assessment yet" hint="Run one from the Overview to get priorities." />
       </>
     );
   const ps = priorities(l.ev);
   return (
     <>
-      <h1>Development plan</h1>
-      <p className="muted">{DISCLAIMER} These come from fixed rules, not from the ML model.</p>
+      <PageHeader
+        title="Development plan"
+        sub={`${DISCLAIMER} These come from fixed rules, not from the ML model.`}
+      />
       {ps.length === 0 ? (
         <EmptyState
           title="No priorities from current evidence"
           hint="Nothing in your latest snapshot triggers a suggestion."
         />
       ) : (
-        <ol>
-          {ps.map((p) => (
-            <li key={p.id}>
-              {p.text} <span className="muted">Evidence: {p.evidence}</span>
-            </li>
-          ))}
-        </ol>
+        <Card>
+          <ol>
+            {ps.map((p) => (
+              <li key={p.id}>
+                {p.text} <span className="muted">Evidence: {p.evidence}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
       )}
     </>
   );

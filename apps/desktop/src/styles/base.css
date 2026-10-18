@@ -33,7 +33,7 @@ h2 {
   font-size: var(--fs-sm);
 }
 .signin {
-  max-width: 420px;
+  max-width: 480px;
   margin: var(--space-5) auto;
   display: grid;
   gap: var(--space-3);

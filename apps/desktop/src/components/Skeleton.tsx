@@ -5,8 +5,9 @@ export const Skeleton = ({ width = "100%" }: { width?: string }) => (
 );
 
 export const Loading = ({ label = "Loading…" }: { label?: string }) => (
-  <Card role="status" aria-live="polite">
-    {label}
+  <Card role="status" aria-live="polite" className="stack">
+    <span>{label}</span>
     <Skeleton width="60%" />
+    <Skeleton width="85%" />
   </Card>
 );

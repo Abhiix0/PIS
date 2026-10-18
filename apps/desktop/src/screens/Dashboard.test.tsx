@@ -31,7 +31,6 @@ it("shows an empty state, saves a new profile, and shows it", async () => {
   const f = serve({ user_id: "u", profile: null }, () => json(p, 201));
   render(<Dashboard />);
   expect(await screen.findByText(/No profile yet/)).toBeInTheDocument();
-  expect(screen.getByText("No integrations connected")).toBeInTheDocument();
   await userEvent.type(screen.getByLabelText("Name"), "Ada");
   await userEvent.type(screen.getByLabelText("CGPA"), "8.5");
   await userEvent.click(screen.getByText("Save profile"));

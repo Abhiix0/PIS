@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ConnectionProvider, useConnection } from "./connection";
-import { AppShell, Badge, Button, ErrorState, Loading } from "./components";
+import { AppShell, Badge, Button, Card, ErrorState, Loading, PageHeader } from "./components";
 import { SessionProvider, useSession } from "./auth/session";
+import type { Native } from "./auth/native";
+import { DEMO } from "./lib/assessment";
 import Assessment from "./screens/Assessment";
 import Dashboard from "./screens/Dashboard";
 import History from "./screens/History";
@@ -12,13 +14,16 @@ import Privacy from "./screens/Privacy";
 
 function Status() {
   const { status } = useConnection();
-  const text = { checking: "Checking API…", online: "API online", offline: "API offline" }[status];
+  const text = { checking: "… Checking API", online: "✓ API online", offline: "✕ API offline" }[status];
   return (
-    <Badge
-      tone={{ checking: "neutral", online: "ok", offline: "danger" }[status] as "neutral" | "ok" | "danger"}
-    >
-      {text}
-    </Badge>
+    <span className="row">
+      {DEMO && <Badge tone="info">Sample data</Badge>}
+      <Badge
+        tone={{ checking: "neutral", online: "ok", offline: "danger" }[status] as "neutral" | "ok" | "danger"}
+      >
+        {text}
+      </Badge>
+    </span>
   );
 }
 
@@ -27,9 +32,15 @@ function Settings() {
   const { status, recheck } = useConnection();
   return (
     <>
-      <h1>Settings</h1>
+      <PageHeader
+        title="Settings"
+        actions={
+          <Button variant="ghost" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        }
+      />
       {status === "offline" && <ErrorState message="Cannot reach the server." onRetry={recheck} />}
-      <Button onClick={() => void signOut()}>Sign out</Button>
       <Privacy />
     </>
   );
@@ -39,16 +50,29 @@ function SignIn() {
   const { state, notice, signIn, cancel } = useSession();
   return (
     <main className="signin">
-      <h1>Placement Intelligence</h1>
-      {notice && <p role="alert">{notice}</p>}
-      {state === "signing-in" ? (
-        <>
-          <Loading label="Waiting for you to finish signing in in your browser…" />
-          <Button onClick={cancel}>Cancel</Button>
-        </>
-      ) : (
-        <Button onClick={() => void signIn()}>Sign in</Button>
-      )}
+      <Card className="signin-card">
+        <h1>Placement Intelligence</h1>
+        <p className="muted">
+          A readiness proxy score and development plan built from your public coding and GitHub activity.
+        </p>
+        {notice && (
+          <p role="alert" className="err">
+            ! {notice}
+          </p>
+        )}
+        {state === "signing-in" ? (
+          <>
+            <Loading label="Waiting for you to finish signing in in your browser…" />
+            <Button variant="ghost" onClick={cancel}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button variant="accent" onClick={() => void signIn()}>
+            Sign in
+          </Button>
+        )}
+      </Card>
     </main>
   );
 }
@@ -65,7 +89,12 @@ const NAV = [
 
 function Shell() {
   const { state } = useSession();
-  if (state === "loading") return <Loading />;
+  if (state === "loading")
+    return (
+      <main className="signin">
+        <Loading />
+      </main>
+    );
   if (state !== "signed-in") return <SignIn />;
   return (
     <AppShell title="Placement Intelligence" nav={NAV} status={<Status />}>
@@ -83,10 +112,10 @@ function Shell() {
   );
 }
 
-export default function App() {
+export default function App({ native }: { native?: Native }) {
   return (
     <ConnectionProvider>
-      <SessionProvider>
+      <SessionProvider native={native}>
         <Shell />
       </SessionProvider>
     </ConnectionProvider>

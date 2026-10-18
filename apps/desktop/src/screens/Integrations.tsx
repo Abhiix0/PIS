@@ -8,7 +8,7 @@ import {
   type Integration,
   type SyncRun,
 } from "../api/v1";
-import { Button, EmptyState, ErrorState, Input, Loading } from "../components";
+import { Button, Card, EmptyState, ErrorState, Input, Loading, PageHeader, StatusBadge } from "../components";
 import { friendly } from "./Dashboard";
 
 const PROVIDERS = [
@@ -108,37 +108,41 @@ function Provider({
     });
 
   return (
-    <section aria-labelledby={`h-${p.id}`}>
-      <h2 id={`h-${p.id}`}>{p.name}</h2>
+    <Card className="stack" aria-labelledby={`h-${p.id}`}>
+      <div className="row between">
+        <h2 id={`h-${p.id}`}>{p.name}</h2>
+        {conn && <StatusBadge status={conn.status} />}
+      </div>
       <p>Collects: {p.collects}</p>
       {conn ? (
         <>
           <p>
-            Account <strong>{conn.external_username}</strong> · {conn.status}
+            Account <strong>{conn.external_username}</strong>
           </p>
           <p>
             Last attempt: {when(conn.last_attempt_at)} · Last successful sync: {when(conn.last_success_at)}
           </p>
-          <Button onClick={() => void sync()} disabled={busy}>
-            Sync now
-          </Button>{" "}
-          <Button
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                await disconnectProvider(p.id, wipe);
-                reload();
-              })
-            }
-          >
-            Disconnect
-          </Button>
-          <p>
-            <label>
-              <input type="checkbox" checked={wipe} onChange={(e) => setWipe(e.target.checked)} /> Also delete
-              data imported from {p.name}
-            </label>
-          </p>
+          <div className="row">
+            <Button onClick={() => void sync()} disabled={busy}>
+              Sync now
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await disconnectProvider(p.id, wipe);
+                  reload();
+                })
+              }
+            >
+              Disconnect
+            </Button>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={wipe} onChange={(e) => setWipe(e.target.checked)} />
+            Also delete data imported from {p.name}
+          </label>
           <p className="muted">
             Disconnecting stops syncing; no {p.name} credentials are stored, so none need revoking. Imported
             data is kept unless you tick the box. Past assessments keep the snapshot they were built from
@@ -146,14 +150,14 @@ function Provider({
           </p>
         </>
       ) : (
-        <form onSubmit={connect} noValidate>
+        <form onSubmit={connect} noValidate className="stack">
           <Input
             label={`${p.name} username`}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
-          <label>
-            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> I agree
+          <label className="check">
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />I agree
             PIS may read the public data listed above for this account.
           </label>
           <div>
@@ -164,7 +168,7 @@ function Provider({
         </form>
       )}
       {msg && <p role="status">{msg}</p>}
-    </section>
+    </Card>
   );
 }
 
@@ -196,16 +200,21 @@ export default function Integrations() {
   if (!items) return <Loading />;
   return (
     <>
-      <h1>Integrations</h1>
+      <PageHeader
+        title="Integrations"
+        sub="Public data only. No provider passwords or tokens are ever stored."
+      />
       {items.length === 0 && (
         <EmptyState
           title="Nothing connected yet"
           hint="Connect an account to give the assessment evidence."
         />
       )}
-      {PROVIDERS.map((p) => (
-        <Provider key={p.id} p={p} conn={items.find((i) => i.provider === p.id)} reload={reload} />
-      ))}
+      <div className="grid two">
+        {PROVIDERS.map((p) => (
+          <Provider key={p.id} p={p} conn={items.find((i) => i.provider === p.id)} reload={reload} />
+        ))}
+      </div>
     </>
   );
 }

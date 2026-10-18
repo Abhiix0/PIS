@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
-import { getIntegrations, getMe, putProfile, type Integration, type Profile } from "../api/v1";
-import { Button, EmptyState, ErrorState, Input, Loading } from "../components";
+import { getMe, putProfile, type Profile } from "../api/v1";
+import { Button, Card, ErrorState, Input, Loading, PageHeader, StatCard } from "../components";
 
 export const friendly = (e: unknown) =>
   e instanceof ApiError
@@ -64,7 +64,7 @@ function ProfileForm({ initial, onSaved }: { initial: Profile | null; onSaved: (
   }
 
   return (
-    <form onSubmit={submit} noValidate>
+    <form onSubmit={submit} noValidate className="stack">
       <Input label="Name" value={f.display_name} onChange={set("display_name")} error={errors.display_name} />
       <Input label="Branch" value={f.branch} onChange={set("branch")} />
       <Input
@@ -77,26 +77,26 @@ function ProfileForm({ initial, onSaved }: { initial: Profile | null; onSaved: (
       <Input label="CGPA" inputMode="decimal" value={f.cgpa} onChange={set("cgpa")} error={errors.cgpa} />
       {failure && (
         <p role="alert" className="err">
-          {failure}
+          ! {failure}
         </p>
       )}
-      <Button type="submit" disabled={saving}>
-        {saving ? "Saving…" : "Save profile"}
-      </Button>
+      <div>
+        <Button type="submit" disabled={saving}>
+          {saving ? "Saving…" : "Save profile"}
+        </Button>
+      </div>
     </form>
   );
 }
 
-const when = (t: string | null) => (t ? new Date(t).toLocaleString() : "never");
-
 export default function Dashboard() {
-  const [data, setData] = useState<{ profile: Profile | null; items: Integration[] } | null>(null);
+  const [data, setData] = useState<{ profile: Profile | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
   const load = useCallback(() => {
-    Promise.all([getMe(), getIntegrations()]).then(
-      ([me, i]) => setData({ profile: me.profile, items: i.items }),
+    getMe().then(
+      (me) => setData({ profile: me.profile }),
       (e) => setError(friendly(e)),
     );
   }, []);
@@ -113,53 +113,40 @@ export default function Dashboard() {
       />
     );
   if (!data) return <Loading />;
-  const { profile, items } = data;
+  const { profile } = data;
   return (
     <>
-      <h1>Profile</h1>
-      <section aria-labelledby="h-profile">
-        <h2 id="h-profile">Profile</h2>
-        {!profile || editing ? (
-          <>
-            {!profile && <p>No profile yet. Add your details to get started.</p>}
-            <ProfileForm
-              initial={profile}
-              onSaved={(p) => {
-                setData({ ...data, profile: p });
-                setEditing(false);
-              }}
-            />
-          </>
-        ) : (
-          <>
-            <p>
-              <strong>{profile.display_name}</strong>
-              {profile.branch && ` · ${profile.branch}`}
-              {profile.graduation_year && ` · Class of ${profile.graduation_year}`}
-              {profile.cgpa !== null && ` · CGPA ${profile.cgpa}`}
-            </p>
-            <Button onClick={() => setEditing(true)}>Edit profile</Button>
-          </>
-        )}
-      </section>
-      <section aria-labelledby="h-int">
-        <h2 id="h-int">Integrations</h2>
-        {items.length === 0 ? (
-          <EmptyState
-            title="No integrations connected"
-            hint="Connect GitHub or LeetCode from the Integrations screen."
+      <PageHeader
+        title="Profile"
+        sub="Self-reported details. CGPA is user-entered and not verified."
+        actions={
+          profile && !editing ? (
+            <Button variant="ghost" onClick={() => setEditing(true)}>
+              Edit profile
+            </Button>
+          ) : undefined
+        }
+      />
+      {!profile || editing ? (
+        <Card className="stack" aria-labelledby="h-profile">
+          <h2 id="h-profile">{profile ? "Edit profile" : "Create your profile"}</h2>
+          {!profile && <p>No profile yet. Add your details to get started.</p>}
+          <ProfileForm
+            initial={profile}
+            onSaved={(p) => {
+              setData({ ...data, profile: p });
+              setEditing(false);
+            }}
           />
-        ) : (
-          <ul>
-            {items.map((i) => (
-              <li key={i.id}>
-                {i.provider} ({i.external_username}): {i.status}. Last successful sync:{" "}
-                {when(i.last_success_at)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        </Card>
+      ) : (
+        <div className="grid">
+          <StatCard small label="Name" value={profile.display_name} />
+          <StatCard small label="Branch" value={profile.branch ?? "—"} />
+          <StatCard label="Class of" value={profile.graduation_year ?? "—"} />
+          <StatCard label="CGPA" value={profile.cgpa ?? "—"} hint="User-entered" />
+        </div>
+      )}
     </>
   );
 }

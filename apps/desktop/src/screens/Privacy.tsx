@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { deleteAccount, exportMyData, getPrivacy, putPrivacy } from "../api/v1";
 import { useSession } from "../auth/session";
-import { Button, ErrorState } from "../components";
+import { Button, Card, ErrorState } from "../components";
 
 export default function Privacy() {
   const { signOut } = useSession();
@@ -38,62 +38,74 @@ export default function Privacy() {
     });
 
   return (
-    <section aria-labelledby="privacy-h">
+    <section aria-labelledby="privacy-h" className="stack">
       <h2 id="privacy-h">Privacy and your data</h2>
       {err && <ErrorState message={err} />}
       {msg && <p role="status">{msg}</p>}
-      <h3>What is stored</h3>
-      <ul>
-        <li>Your profile (name, branch, graduation year, CGPA) - to build your assessment.</li>
-        <li>
-          Public GitHub/LeetCode usernames and the activity counts synced from them - the assessment evidence.
-        </li>
-        <li>Assessment snapshots - your history. No provider passwords or tokens are stored.</li>
-      </ul>
-      <p className="muted">
-        Backups: database backups are kept for a limited period set by the operator and are not edited;
-        deleted data leaves them when they expire.
-      </p>
-      <h3>Optional research use</h3>
-      <p>
-        <label>
+      <Card>
+        <h3>What is stored</h3>
+        <ul>
+          <li>Your profile (name, branch, graduation year, CGPA) - to build your assessment.</li>
+          <li>
+            Public GitHub/LeetCode usernames and the activity counts synced from them - the assessment
+            evidence.
+          </li>
+          <li>Assessment snapshots - your history. No provider passwords or tokens are stored.</li>
+        </ul>
+        <p className="muted">
+          Backups: database backups are kept for a limited period set by the operator and are not edited;
+          deleted data leaves them when they expire.
+        </p>
+      </Card>
+      <Card className="stack">
+        <h3>Optional research use</h3>
+        <label className="check">
           <input
             type="checkbox"
             checked={consent}
             onChange={(e) =>
               void act(async () => setConsent((await putPrivacy(e.target.checked)).research_consent))
             }
-          />{" "}
+          />
           Allow my data to be used for research/model training in future
         </label>
-      </p>
-      <p className="muted">
-        Off by default. Nothing uses your data this way today; you can withdraw any time.
-      </p>
-      <h3>Export</h3>
-      <Button onClick={() => void download()}>Download my data (JSON)</Button>
-      <h3>Delete account</h3>
-      <p>
-        Permanently erases your profile, connections, imported data and assessments, and signs you out
-        everywhere.
-      </p>
-      <p>
-        <label>
-          <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} /> I
+        <p className="muted">
+          Off by default. Nothing uses your data this way today; you can withdraw any time.
+        </p>
+      </Card>
+      <Card className="stack">
+        <h3>Export</h3>
+        <div>
+          <Button variant="ghost" onClick={() => void download()}>
+            Download my data (JSON)
+          </Button>
+        </div>
+      </Card>
+      <Card className="stack danger-zone">
+        <h3>Delete account</h3>
+        <p>
+          Permanently erases your profile, connections, imported data and assessments, and signs you out
+          everywhere.
+        </p>
+        <label className="check">
+          <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />I
           understand this cannot be undone
         </label>
-      </p>
-      <Button
-        disabled={!confirm}
-        onClick={() =>
-          void act(async () => {
-            await deleteAccount();
-            await signOut();
-          })
-        }
-      >
-        Delete my account
-      </Button>
+        <div>
+          <Button
+            variant="danger"
+            disabled={!confirm}
+            onClick={() =>
+              void act(async () => {
+                await deleteAccount();
+                await signOut();
+              })
+            }
+          >
+            Delete my account
+          </Button>
+        </div>
+      </Card>
     </section>
   );
 }

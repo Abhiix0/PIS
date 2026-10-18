@@ -1,11 +1,29 @@
 import { useState } from "react";
 import { createAssessment } from "../api/v1";
-import { Banner, Button, EmptyState, ErrorState, Loading } from "../components";
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  Loading,
+  PageHeader,
+  StatCard,
+} from "../components";
 import { DISCLAIMER, hasScore, isStale, priorities } from "../lib/assessment";
 import { friendly } from "./Dashboard";
 import { useLatest } from "./useLatest";
 
-export function RunAssessment({ onDone, label = "Run assessment" }: { onDone: () => void; label?: string }) {
+export function RunAssessment({
+  onDone,
+  label = "Run assessment",
+  variant,
+}: {
+  onDone: () => void;
+  label?: string;
+  variant?: "primary" | "accent" | "ghost";
+}) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   async function go() {
@@ -21,18 +39,23 @@ export function RunAssessment({ onDone, label = "Run assessment" }: { onDone: ()
     }
   }
   return (
-    <>
-      <Button onClick={() => void go()} disabled={busy}>
+    <div className="stack">
+      <Button variant={variant} onClick={() => void go()} disabled={busy}>
         {busy ? "Running…" : label}
       </Button>
       {err && (
         <p role="alert" className="err">
-          {err}
+          ! {err}
         </p>
       )}
-    </>
+    </div>
   );
 }
+
+const age = (iso: string) => {
+  const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5);
+  return d <= 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`;
+};
 
 export default function Overview() {
   const [l, reload] = useLatest();
@@ -41,40 +64,81 @@ export default function Overview() {
   if (l.s === "empty")
     return (
       <>
-        <h1>Overview</h1>
+        <PageHeader title="Overview" />
         <EmptyState
           title="No assessment yet"
           hint="Connect a source, sync it, then run your first assessment."
-        />
-        <RunAssessment onDone={reload} />
+        >
+          <RunAssessment onDone={reload} />
+        </EmptyState>
       </>
     );
   const { a, ev } = l;
   const stale = [ev.github, ev.leetcode].some((d) => d && isStale(d.synced_at));
+  const scored = hasScore(a);
+  const top = priorities(ev).slice(0, 3);
   return (
     <>
-      <h1>Overview</h1>
-      <p>Last assessment: {new Date(a.created_at).toLocaleString()}</p>
+      <PageHeader title="Overview" sub={`Last assessment: ${new Date(a.created_at).toLocaleString()}`} />
       {stale && (
-        <Banner tone="warn">Some provider data is more than a week old. Re-sync for current evidence.</Banner>
+        <Banner tone="warn">
+          ! Some provider data is more than a week old. Re-sync for current evidence.
+        </Banner>
       )}
-      {hasScore(a) ? (
-        <p>
-          Readiness proxy score: <strong>{a.readiness_score}</strong> ({a.category})
-        </p>
-      ) : (
-        <p>No score yet. {a.reason}</p>
-      )}
-      <h2>Top priorities</h2>
-      <ul>
-        {priorities(ev)
-          .slice(0, 3)
-          .map((p) => (
-            <li key={p.id}>{p.text}</li>
-          ))}
-      </ul>
-      <p className="muted">{DISCLAIMER}</p>
-      <RunAssessment onDone={reload} label="Run a new assessment" />
+      <Card className="hero">
+        <div>
+          <div className="eyebrow">{scored ? "Readiness proxy score" : "Readiness evidence"}</div>
+          <div className="big">
+            {scored ? (
+              <>
+                {a.readiness_score}
+                <em>/100</em>
+              </>
+            ) : (
+              "Not scored"
+            )}
+          </div>
+          <p>
+            {scored
+              ? `Category: ${a.category}. An ML estimate of a formula, not a placement outcome.`
+              : `No score yet. ${a.reason}`}
+          </p>
+        </div>
+        <div className="stack">
+          <Badge>{scored ? "ML estimate" : "Evidence only"}</Badge>
+          <RunAssessment onDone={reload} label="Run a new assessment" />
+        </div>
+      </Card>
+      <div className="grid">
+        <StatCard
+          label="CGPA"
+          value={ev.cgpa?.value ?? "—"}
+          hint={ev.cgpa ? "User-entered, not verified" : "Missing from profile"}
+        />
+        <StatCard
+          label="Public GitHub repos"
+          value={ev.github?.values.github_public_repo_count ?? "—"}
+          hint={ev.github ? `Observed · synced ${age(ev.github.synced_at)}` : "Not connected"}
+        />
+        <StatCard
+          label="LeetCode solved"
+          value={ev.leetcode?.values.leetcode_solved_all ?? "—"}
+          hint={ev.leetcode ? `Observed · synced ${age(ev.leetcode.synced_at)}` : "Not connected"}
+        />
+      </div>
+      <Card>
+        <h2>Top priorities</h2>
+        {top.length ? (
+          <ol>
+            {top.map((p) => (
+              <li key={p.id}>{p.text}</li>
+            ))}
+          </ol>
+        ) : (
+          <p>Nothing in your latest snapshot triggers a suggestion.</p>
+        )}
+        <p className="muted">{DISCLAIMER}</p>
+      </Card>
     </>
   );
 }
