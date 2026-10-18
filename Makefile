@@ -1,5 +1,5 @@
 # PIS — Project Commands
-.PHONY: lint test-unit migrate up up-detached down down-clean restart test test-local health logs clean
+.PHONY: check check-ui lint test-unit migrate up up-detached down down-clean restart test test-local health logs clean
 
 up:
 	docker-compose up --build
@@ -41,3 +41,10 @@ logs:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
+
+# lint + typecheck + tests with the coverage floor (.coveragerc); same as CI. DB tests need TEST_ADMIN_DATABASE_URL
+check: lint
+	python -m pytest --cov=app --cov=services --cov=ml --cov=ingest --cov-report=term-missing
+
+check-ui:
+	cd apps/desktop && npm run typecheck && npm run lint && npm run format && npm test
