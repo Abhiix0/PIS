@@ -6,7 +6,7 @@ Guidance for Claude Code in this repository. Verify files and commands against t
 
 - `docs/README.md` — index of all documentation (topical folders: architecture, data, ml, security, ops, research, design, product, history).
 - `docs/architecture/current-state.md` — verified description of today's system, known limitations, open decisions.
-- `docs/product/PIS_PRD.md` — product specification (open decisions in §19). The phased implementation plan was deleted; `docs/history/` is historical.
+- `docs/product/PIS_PRD.md` — product specification (open decisions in §19). The implementation plan was deleted; `docs/history/` is historical.
 - `CONTRIBUTING.md` — branching, `make check`, migration/synthetic-data/ML rules.
 
 ## Product and stack

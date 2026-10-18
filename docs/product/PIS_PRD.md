@@ -1,6 +1,6 @@
 # Placement Intelligence System (PIS)
 
-> Product specification; parts predate the implementation. The phased implementation plan that accompanied it was deleted from the repo (commit `e1fc2cd`) and is historical.
+> Product specification; parts predate the implementation. The implementation plan that accompanied it was deleted from the repo (commit `e1fc2cd`) and is historical.
 
 ## Product Requirements Document (PRD)
 
@@ -97,7 +97,7 @@ intelligence system.**
     while replacing defective or unsubstantiated behavior.
 -   **No hidden synthetic data.** Generated fixtures must be labelled as
     synthetic and must never masquerade as real activity.
--   **Measurable releases.** Every phase has explicit acceptance
+-   **Measurable releases.** Every release has explicit acceptance
     criteria.
 
 ------------------------------------------------------------------------

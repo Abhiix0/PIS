@@ -6,7 +6,7 @@ CREATE TYPE data_origin AS ENUM ('real','demo','legacy_seed');
 
 CREATE TABLE users (
     id           UUID PRIMARY KEY,
-    auth_subject TEXT NOT NULL UNIQUE,            -- opaque IdP subject; provider chosen in Phase 5 (PRD 19#2)
+    auth_subject TEXT NOT NULL UNIQUE,            -- opaque IdP subject; provider chosen with the auth work (PRD 19#2)
     email        TEXT,
     status       TEXT NOT NULL CHECK (status IN ('active','suspended','deletion_pending','deleted')),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -17,7 +17,7 @@ CREATE TABLE profiles (
     id                UUID PRIMARY KEY,
     user_id           UUID UNIQUE REFERENCES users(id) ON DELETE RESTRICT,
     origin            data_origin NOT NULL,
-    legacy_student_id INT UNIQUE,                 -- link to students.id; dropped after Phase 5 cutover
+    legacy_student_id INT UNIQUE,                 -- link to students.id; dropped after the auth cutover
     display_name      TEXT NOT NULL,
     branch            TEXT,
     graduation_year   SMALLINT,

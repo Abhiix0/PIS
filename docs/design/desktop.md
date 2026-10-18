@@ -17,7 +17,7 @@ npm run typecheck | lint | format | test | build
 - All network I/O is browser `fetch` in `src/api/client.ts` (single choke point, error envelope -> `ApiError`).
   CSP `connect-src` allows `localhost:8000` and `https:`; **tighten to the production API origin before release.**
 - Only `VITE_*` public config is bundled. Tokens/keys must never be placed in it.
-- Token persistence (implemented in Phase 11, see `docs/security/desktop-session.md`): store the refresh token in the OS credential
+- Token persistence (implemented, see `docs/security/desktop-session.md`): store the refresh token in the OS credential
   store via a Rust command (Windows Credential Manager), keep access tokens in memory only. The webview must
   not use localStorage for tokens. This needs a new capability when added.
 - External links / navigation validation: no links exist yet; add an allowlist when the first one does.

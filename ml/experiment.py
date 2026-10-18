@@ -101,7 +101,7 @@ def run(features_path: Path) -> dict:
         "synthetic": True,
         "claim": "Pipeline smoke test on synthetic formula labels. Says nothing about placement outcomes.",
         "dataset": {
-            "path": str(features_path),
+            "path": features_path.as_posix(),
             "sha256": hashlib.sha256(raw_bytes).hexdigest(),
             "rows": len(df),
             "students": int(n_splits),

@@ -2,7 +2,7 @@
 
 Access date for every entry: **2026-10-13**. Method: a handful of web searches plus page fetches. This is not a systematic review. Anything not opened and read is marked **unverified**. Dates are given only where a page stated them.
 
-## 1. Verified sources (page opened this phase)
+## 1. Verified sources (page opened for this review)
 
 | Source | URL | Date | What was verified |
 |---|---|---|---|
@@ -38,7 +38,7 @@ Searches did not surface PrepInsta, Naukri Campus, or HackerRank certification, 
 
 ## 5. Simpler baselines relevant to the chosen task
 
-Persistence (last value), historical mean, seasonal-naive, and Poisson/logistic regression on lagged counts. The repo already has dummy baselines in `ml/train.py`, but on a 2-row test split (Phase 1 §3).
+Persistence (last value), historical mean, seasonal-naive, and Poisson/logistic regression on lagged counts. The repo already has dummy baselines in `ml/train.py`, but on a 2-row test split.
 
 ## 6. Product feature vs research contribution
 

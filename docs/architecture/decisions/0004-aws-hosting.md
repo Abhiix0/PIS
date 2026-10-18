@@ -1,6 +1,6 @@
 # ADR 0004 — Hosting: AWS (ECS Fargate + RDS PostgreSQL)
 
-Status: accepted (owner decision, Phase 15). Region, budget and account IDs are **not yet decided** — see Open items.
+Status: accepted (owner decision, hosting work). Region, budget and account IDs are **not yet decided** — see Open items.
 
 ## Context
 Backend = FastAPI container + PostgreSQL 15 (psycopg2). Needs: managed Postgres 15, secret store, private DB networking, PITR backups, logs/alarms, rollback, budget alerts (plan §15.1).
@@ -28,5 +28,5 @@ AWS. Chosen for network isolation (private DB reachable only from the app securi
 ## Open items (need an owner decision before first apply)
 1. Region / data residency (student data; privacy policy in `docs/data/privacy-and-retention.md`).
 2. Monthly budget per environment (`monthly_budget_usd`).
-3. Production IdP issuer/audience/JWKS (Phase 5 left the IdP vendor open).
+3. Production IdP issuer/audience/JWKS (the IdP vendor was left open).
 4. Whether Multi-AZ production is worth the cost at launch scale.

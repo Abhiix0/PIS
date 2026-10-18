@@ -8,11 +8,11 @@ Status: **proposed, needs human sign-off** (see §6). Access date for all web so
 
 ## 2. Why Path A is not feasible
 
-Repo facts are verified (Phase 1). Feasibility judgments about the outside world are hypotheses.
+Repo facts are verified (initial repo audit). Feasibility judgments about the outside world are hypotheses.
 
 | Requirement for A | Evidence today |
 |---|---|
-| Real historical outcome labels | None. The repo has 8 hand-written seed students (`sql/seed.sql`). Labels in `ml/labels.py` are a weighted formula of the same features plus N(0,5) noise (Phase 1 `02_workflow_and_data_map.md`). |
+| Real historical outcome labels | None. The repo has 8 hand-written seed students (`sql/seed.sql`). Labels in `ml/labels.py` are a weighted formula of the same features plus N(0,5) noise. |
 | Labels timed after features | Not applicable: no outcomes exist. |
 | Consent / access | No mechanism. No auth (D-12), no research-consent flow (PRD §19 #14 open). Outcomes (offers, employers, salary) are sensitive and would come from placement cells or the students themselves. |
 | Representative population | Unknown. One institution's cohort is one cohort, one year, one market. Selection bias is likely (who has a public GitHub/LeetCode, who sits for drives). |
@@ -45,5 +45,5 @@ A student deciding **what to practise next** and whether their activity is trend
 2. GitHub: public username only vs OAuth device flow (§19 #3). Recommendation: public-only first, OAuth later.
 3. LeetCode: keep the integration only as labelled aggregates, or use manual entry. ToS not verified (§19 #4).
 4. Whether any placement outcomes will ever be collected, from whom, with what consent (§19 #14, #13).
-5. Whether the experimental task in `initial-experiment-protocol.md` is the right first ML task, or ML is deferred and Phase 3+ ships rules only.
-6. Disposition of the current RF models and UI copy: relabel as heuristic now, or retire. (No code was changed in Phase 2.)
+5. Whether the experimental task in `initial-experiment-protocol.md` is the right first ML task, or ML is deferred and later releases ship rules only.
+6. Disposition of the current RF models and UI copy: relabel as heuristic now, or retire. (No code was changed by the research step.)

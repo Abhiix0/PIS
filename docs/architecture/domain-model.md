@@ -34,10 +34,10 @@ users ─< data_requests        audit_events (actor → users, nullable)    data
 `students` (int `id`, open endpoints) is a dev entity and is **not** an authorization boundary. Target: `users` (identity) 1─1 `profiles` (owned data). All personal-data tables hang off `profile_id`, and every query is scoped by the authenticated user's profile, never by an id in the URL alone.
 
 Migration approach (details in ADR-0001), expand → backfill → switch → contract, each a numbered migration:
-1. **Expand** (Phase 5): add the new tables beside the old ones. Nothing is renamed or dropped.
+1. **Expand**: add the new tables beside the old ones. Nothing is renamed or dropped.
 2. **Backfill**: each `students` row becomes a `profiles` row with `origin='legacy_seed'`, `user_id NULL`, `legacy_student_id = students.id`. `profiles` has `CHECK ((origin='real') = (user_id IS NOT NULL))`, so a legacy/demo profile can never be claimed by or merged into an account at the database level. History (`coding_activity`, `github_activity`, `predictions`, `prediction_history`) is kept for them, labelled by origin.
-3. **Switch** (Phase 5/6): new API reads/writes the new tables; the legacy tables become read-only for the dashboard, then are retired with the dashboard.
-4. **Contract**: drop legacy tables only after a backup and an explicit decision. Not before Phase 8/9.
+3. **Switch**: new API reads/writes the new tables; the legacy tables become read-only for the dashboard, then are retired with the dashboard.
+4. **Contract**: drop legacy tables only after a backup and an explicit decision. Not before the dashboard is retired.
 
 Real users start with **no** history: legacy rows are never attributed to them.
 
@@ -46,7 +46,7 @@ Real users start with **no** history: legacy rows are never attributed to them.
 `provenance` enum on every observation and every feature value: `observed` (from the source), `user_entered`, `derived` (computed from verified observations), `inferred` (estimated), `synthetic`.
 `value_state` enum: `present`, `not_collected`, `source_failed`, `stale`, `measured_zero`.
 
-Mapping to the Phase 4 list: observed/entered/derived/inferred/synthetic → `provenance`; missing-not-collected, missing-source-failed, stale, genuine zero → `value_state`. Enforced by CHECKs, not UI copy:
+Mapping to the provenance and missingness list: observed/entered/derived/inferred/synthetic → `provenance`; missing-not-collected, missing-source-failed, stale, genuine zero → `value_state`. Enforced by CHECKs, not UI copy:
 - `value_num IS NOT NULL` ⇔ state in (`present`, `measured_zero`, `stale`); `measured_zero` ⇒ value 0. So a NULL can never mean zero, and a zero is never a missing value.
 - `synthetic` observations must have no `sync_run_id` (they cannot pose as a sync result).
 - `profiles.origin` keeps demo/legacy data out of real accounts (see §2).
@@ -59,7 +59,7 @@ Time: `event_at` (when it happened at the source, nullable, with `event_at_preci
 - An assessment points to one `feature_snapshot` and one `model_version`; the snapshot lists its exact input observations in `snapshot_inputs`. Later syncs add observations; they never rewrite an old snapshot or assessment.
 - `feature_schemas.version` pins names, units, formulas, window and scaling; snapshots and model versions reference it. A model is only applied to snapshots with its own `feature_schema_version`.
 - **Immutable**: observations, snapshots, feature values, assessments, evidence, recommendation text, activation log, audit events. **Recomputable**: a new snapshot/assessment from the same inputs (a new row, never an update). **Mutable**: profile fields, connection status, recommendation action state, request status.
-- Immutability is enforced in Phase 5/6 by omitting UPDATE/DELETE paths in the service layer and revoking them from the app role on these tables (not yet implemented).
+- Immutability is enforced in the service layer by omitting UPDATE/DELETE paths in the service layer and revoking them from the app role on these tables (not yet implemented).
 - Retention/deletion: see §7.
 
 ## 5. Authorization matrix (default deny)
@@ -85,7 +85,7 @@ Roles: **Owner** (the authenticated user, own rows), **Auth** (any other authent
 | demo / legacy_seed profiles | read only in explicit demo mode | same | read | — | — |
 | cohort / ranking across users | — (non-goal until PRD §19#13 is decided) | — | — | — | — |
 
-Today (`/students/*`, `/ranking`, `/ingest/*`, `/pipeline/*`) is entirely open; this matrix is the Phase 5 target.
+Today (`/students/*`, `/ranking`, `/ingest/*`, `/pipeline/*`) is entirely open; this matrix is the auth target.
 
 ## 6. Data dictionary v1
 
@@ -139,7 +139,7 @@ Types/constraints are in `draft-schema.sql`; this table gives meaning and person
 
 ## 9. Verification and gaps
 
-- **Not verified**: `draft-schema.sql` has not been run. The local Postgres on :5432 rejected the `.env` credentials and Docker was not running. Check with: create a scratch DB, then `psql -v ON_ERROR_STOP=1 -f docs/architecture/draft-schema.sql`. Do this before Phase 5 turns it into migrations.
-- Row-level security vs. application-layer scoping is not decided (ADR-0001 leaves it to Phase 5).
+- **Not verified**: `draft-schema.sql` has not been run. The local Postgres on :5432 rejected the `.env` credentials and Docker was not running. Check with: create a scratch DB, then `psql -v ON_ERROR_STOP=1 -f docs/architecture/draft-schema.sql`. Do this before it is turned into migrations.
+- Row-level security vs. application-layer scoping is not decided (ADR-0001 leaves it to the auth and ownership work).
 - The identity mechanism is open (PRD §19#2); the model only assumes an opaque `auth_subject`.
 - Whether `cgpa` is stored at all (§19#5) and the backup retention window (§7) are open.

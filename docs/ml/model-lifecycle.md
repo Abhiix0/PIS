@@ -21,4 +21,4 @@ checksum or feature-schema mismatches.
 row per student per hour, so intermediate assessments within the hour are not retained.
 
 **Scaling**: the scaler is fitted by `features.compute` on the full table and bundled with the models (RF does not need it;
-removing it is a separate retraining change). Limitations: scaler fit on all rows before the train/test split (see Phase 7).
+removing it is a separate retraining change). Limitations: scaler fit on all rows before the train/test split (see the model-lifecycle limitations).

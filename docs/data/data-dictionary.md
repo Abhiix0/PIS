@@ -4,9 +4,9 @@ Version constant: `features.compute.FEATURE_SCHEMA_VERSION`. Bump it (and this f
 
 SQL source of truth: `sql/feature_engineering.sql` (cohort) and `sql/feature_engineering_single.sql` (one student). They must stay logically identical; `tests/test_migrate.py::test_full_and_single_feature_sql_agree` is the parity test.
 
-**Scope.** These features are computed from the legacy `students`-keyed tables (`coding_activity`, `github_activity`), which hold **demo/synthetic** data and, for GitHub only, repo-level observed aggregates. Real users' provider data lives in `source_observations` and is **not yet an input to any feature**: building real-user snapshots is Phase 7+ work. Until then no real-user assessment exists.
+**Scope.** These features are computed from the legacy `students`-keyed tables (`coding_activity`, `github_activity`), which hold **demo/synthetic** data and, for GitHub only, repo-level observed aggregates. Real users' provider data lives in `source_observations` and is **not yet an input to any feature**: building real-user snapshots is snapshot work. Until then no real-user assessment exists.
 
-**Provenance.** Each legacy activity row carries `provenance` (`synthetic` by default; `observed` only for rows written from the GitHub adapter). A feature's provenance is the weakest provenance of its input rows. Features are not yet stored with a provenance column (`features` table unchanged); that is a Phase 7 snapshot concern.
+**Provenance.** Each legacy activity row carries `provenance` (`synthetic` by default; `observed` only for rows written from the GitHub adapter). A feature's provenance is the weakest provenance of its input rows. Features are not yet stored with a provenance column (`features` table unchanged); that is a snapshot concern.
 
 **Missing-value semantics (all features, known defect).** The SQL `COALESCE`s a missing input to `0`, so "no data" and "measured zero" are indistinguishable in `features`. Do not read a `0` as an observation. `source_observations.value_state` is the model that separates them (`measured_zero` vs `not_collected` / `source_failed`); the feature tables do not use it yet.
 
@@ -21,7 +21,7 @@ SQL source of truth: `sql/feature_engineering.sql` (cohort) and `sql/feature_eng
 ## What `commit_frequency` does and does not mean
 
 - `commits` is the number of commits **authored by the username** in a public, non-fork repo (adapter uses `author=<username>`; commits under an email not linked to the account are not counted). It is a repo total, not a daily history.
-- `commit_date` is the repo's **last push date** (`pushed_at`), not a commit date. Dividing a lifetime total by "days since the oldest last-push" is therefore not a verified daily rate. Treat it as a coarse activity proxy. It is kept so the demo model keeps working; redefining it is a Phase 7 decision.
+- `commit_date` is the repo's **last push date** (`pushed_at`), not a commit date. Dividing a lifetime total by "days since the oldest last-push" is therefore not a verified daily rate. Treat it as a coarse activity proxy. It is kept so the demo model keeps working; redefining it is a snapshot-design decision.
 - Capped at the 10 most recently pushed non-fork repos.
 
 ## Observation types (`source_observations.observation_type`)

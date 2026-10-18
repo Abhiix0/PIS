@@ -2,7 +2,7 @@
 
 **Decision (user-approved):** managed OIDC identity provider; the API only *verifies* tokens. Provider (Auth0/Clerk/Supabase/Keycloak…) is configuration, not code: `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_JWKS_URL`. No passwords, signup, email verification or recovery live in PIS; those are the IdP's. PRD §19 #2 is resolved to "managed IdP"; the concrete provider is still open.
 
-**Desktop (public client):** must use authorization-code + PKCE against the IdP, hold no client secret, and keep the refresh token in OS secure storage (Phase 10/11). The API never issues or sees refresh tokens. No desktop bundle exists yet, so "no secret in the bundle" is not yet testable.
+**Desktop (public client):** must use authorization-code + PKCE against the IdP, hold no client secret, and keep the refresh token in OS secure storage (desktop session work). The API never issues or sees refresh tokens. No desktop bundle exists yet, so "no secret in the bundle" is not yet testable.
 
 **Verification (`app/auth.py`):** RS256 only (`alg=none`/HS* rejected), signature via JWKS, `iss`, `aud`, `exp`, `iat`, `sub` required. Unconfigured auth fails closed (401). Failures return one generic 401; 20 bad attempts/min/IP then 429.
 
@@ -14,4 +14,4 @@
 
 **Abuse limits:** in-process sliding-window limiter (10/min per subject on pipeline/ingest/predict/admin); 64 KiB body cap (Content-Length based); batch ≤ 20, ranking limit ≤ 100. Logs record method/path/status only, never headers or tokens.
 
-**Known gaps:** limiter is per-process; chunked bodies bypass the size check; background-worker identity/scopes are not implemented (no worker exists); legacy students are not backfilled to `profiles`; `ADMIN_KEY` references remain in historical Phase 1–3 reports.
+**Known gaps:** limiter is per-process; chunked bodies bypass the size check; background-worker identity/scopes are not implemented (no worker exists); legacy students are not backfilled to `profiles`; `ADMIN_KEY` references remain in historical reports.

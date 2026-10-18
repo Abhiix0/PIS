@@ -2,7 +2,7 @@
   "synthetic": true,
   "claim": "Pipeline smoke test on synthetic formula labels. Says nothing about placement outcomes.",
   "dataset": {
-    "path": "features\\features_raw.csv",
+    "path": "features/features_raw.csv",
     "sha256": "a7d069146a579b63d8b4ee4f3f1a355bad03e2e2086dc5cca84a5eb819e6d9fb",
     "rows": 9,
     "students": 9,
@@ -105,5 +105,5 @@
       "skill_vs_mean": 0.687
     }
   },
-  "report_sha256": "d58b154ed473c3ecac552e7c21093fdc1916332cca73b0fc15820d8bb27a9076"
+  "report_sha256": "a920eb9bf8aedd7f62fb195f718ca5721242bf377bf23c13e24b8176d1bab4e0"
 }

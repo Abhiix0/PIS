@@ -24,10 +24,10 @@
 - GitHub: public, non-fork repos only; newest-pushed 10; attributed commits exclude commits under unlinked emails; no per-day history. `commit_frequency` is a coarse proxy (see data dictionary).
 - Unauthenticated GitHub allows 60 requests/hour per server IP; one sync costs up to 1 + 10 + listing pages. Many users on one IP will hit `rate_limited`. A server token raises this to 5,000/h but is a shared budget.
 - Changing a connected username disconnects the old connection and starts a new one; old observations remain, traceable via `sync_run → connection`.
-- Cooldown/rate limit state for the API limiter is per process (unchanged from Phase 5). The running-sync guard is DB-enforced.
+- Cooldown/rate limit state for the API limiter is per process (unchanged since auth was added). The running-sync guard is DB-enforced.
 
-## Not done (out of scope for this phase)
+## Not done (out of scope for this change)
 
-- **Real-user features/assessments:** `source_observations` do not yet feed `features`, predictions or insights (Phase 7+/snapshots). The legacy `features` table still conflates "no data" with 0 and has no provenance column. Therefore "every assessment input traceable to provenance" holds for legacy inputs (row-level `provenance`) and for real observations, but there is no real-user assessment yet.
+- **Real-user features/assessments:** `source_observations` do not yet feed `features`, predictions or insights (snapshots). The legacy `features` table still conflates "no data" with 0 and has no provenance column. Therefore "every assessment input traceable to provenance" holds for legacy inputs (row-level `provenance`) and for real observations, but there is no real-user assessment yet.
 - Delegated GitHub access, user-entered CGPA as an observation, observation-read API, background worker/scheduler, stale-data (`value_state='stale'`) marking, dashboard changes (it still labels any username-bearing student "Real Data").
 - No live-network test against GitHub or LeetCode was run; all provider behavior is verified against mocked responses only.

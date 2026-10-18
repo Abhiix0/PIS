@@ -3,7 +3,7 @@
 Status: accepted; realised by migrations 004-007 (file names checked, not re-verified against runtime).
 
 ## Context
-Today a missing value is `0` or absent, synthetic fallbacks look like real data, and invented dates are stored as real ones. Phase 2 requires distinguishing observed/entered/derived/inferred/synthetic and missing-not-collected/source-failed/stale/zero.
+Today a missing value is `0` or absent, synthetic fallbacks look like real data, and invented dates are stored as real ones. The requirements call for distinguishing observed/entered/derived/inferred/synthetic and missing-not-collected/source-failed/stale/zero.
 
 ## Options
 1. UI-only labels. Rejected: data can be misread by every other consumer.
@@ -18,5 +18,5 @@ Today a missing value is `0` or absent, synthetic fallbacks look like real data,
 
 ## Consequences
 - Adding a provenance class or state is a migration (enum change); accepted, as these should change rarely.
-- Ingestion (Phase 6) must classify every datum on write; "unknown" is not an allowed provenance.
-- Feature computation (Phase 6/7) must propagate state; combining a `source_failed` input yields a non-`present` output.
+- Ingestion must classify every datum on write; "unknown" is not an allowed provenance.
+- Feature computation must propagate state; combining a `source_failed` input yields a non-`present` output.

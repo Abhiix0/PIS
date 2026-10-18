@@ -11,8 +11,8 @@ Status: accepted; realised by migrations 004-007 (file names checked, not re-ver
 - Rule-only assessments use a `model_versions` row with `kind='rule'` so the reference is never null.
 - Feature values are normalised rows (not JSON) so provenance/state stay constrainable (ADR-0002).
 - Recommendation text is immutable; user action state lives in a separate mutable table.
-- Insert-only is enforced in the service layer and by revoking UPDATE/DELETE from the app role (Phase 5/6); account deletion is the only delete path.
+- Insert-only is enforced in the service layer and by revoking UPDATE/DELETE from the app role (service layer); account deletion is the only delete path.
 
 ## Consequences
 - Storage grows per assessment; acceptable for a personal-use scale and bounded by the throttle already applied to history.
-- Historical results stay explainable after model changes, and deletion must cascade through snapshots (Phase 13).
+- Historical results stay explainable after model changes, and deletion must cascade through snapshots (account deletion work).

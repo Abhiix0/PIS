@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -33,3 +36,9 @@ def test_scaler_is_fit_inside_each_fold(tmp_path):
 
 def test_rule_formula_weights():
     assert RuleFormula().predict(np.ones((1, 5)))[0] == 100
+
+
+def test_recorded_dataset_path_is_posix(tmp_path):
+    assert "\\" not in run(_csv(tmp_path))["dataset"]["path"]
+    for f in Path("experiments").glob("baseline-synthetic-*.json"):
+        assert "\\" not in json.loads(f.read_text())["dataset"]["path"]
