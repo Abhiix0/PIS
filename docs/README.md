@@ -8,7 +8,7 @@ Docs describe the repository as it is. Start with [architecture/current-state.md
 | | [api-surface](architecture/api-surface.md) | route table (checked by a test) |
 | | [api-v1](architecture/api-v1.md) | `/api/v1` behaviour |
 | | [domain-model](architecture/domain-model.md), [erd](architecture/erd.png), [draft-schema](architecture/draft-schema.sql) | entities, identity, provenance (design reference) |
-| | [decisions/](architecture/decisions/) | ADRs 0001-0004 |
+| | [decisions/](architecture/decisions/) | ADRs 0001-0005 |
 | | [query-optimization](architecture/query-optimization.md) | index/EXPLAIN results |
 | Data | [data-dictionary](data/data-dictionary.md) | feature contract `features-v1` |
 | | [provenance](data/provenance.md) | ingestion, provenance, data quality |

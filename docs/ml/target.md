@@ -39,11 +39,17 @@ A student deciding **what to practise next** and whether their activity is trend
 - An overstated score gives false reassurance or the wrong prep emphasis. An understated one discourages, and it penalises students whose work is private or off-platform.
 - Mitigation: show coverage ("based on public GitHub + LeetCode counts only"), show uncertainty, never rank individuals.
 
-## 6. Unresolved decisions needing human approval
+## 6. Decisions and unresolved items
 
-1. Confirm Path B and the wording rules above (PRD §19 #1).
-2. GitHub: public username only vs OAuth device flow (§19 #3). Recommendation: public-only first, OAuth later.
-3. LeetCode: keep the integration only as labelled aggregates, or use manual entry. ToS not verified (§19 #4).
-4. Whether any placement outcomes will ever be collected, from whom, with what consent (§19 #14, #13).
-5. Whether the experimental task in `initial-experiment-protocol.md` is the right first ML task, or ML is deferred and later releases ship rules only.
-6. Disposition of the current RF models and UI copy: relabel as heuristic now, or retire. (No code was changed by the research step.)
+Proposed in `../architecture/decisions/0005-ml-direction.md` (needs human sign-off):
+
+1. Path B and the wording rules above (PRD §19 #1). Outcome prediction closed; reopen conditions are in the ADR.
+2. The first ML task is RQ1 in `experiment-protocol.md` §B: forecast **active weeks** in the next 4 weeks from daily GitHub contribution counts. Isolated offline experiment, not wired into the product score.
+3. The legacy RandomForest score is a heuristic proxy, quarantined from the real-user path. Relabel or retire in UI/API copy is still open.
+
+Still unresolved:
+
+4. GitHub: public username only vs OAuth device flow (§19 #3). Recommendation: public-only first, OAuth later. RQ1's collector (GraphQL calendar, server token) has unverified points: window limit, timezone, private contributions, ToS (protocol §B4).
+5. LeetCode: keep the integration only as labelled aggregates, or use manual entry. ToS not verified (§19 #4).
+6. Whether any placement outcomes will ever be collected, from whom, with what consent (§19 #14, #13).
+7. Consent and recruitment route for RQ1 (protocol §B6).

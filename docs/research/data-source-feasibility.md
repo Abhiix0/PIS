@@ -6,17 +6,17 @@ Access date: 2026-10-13. "Code" = read from `ingest/*_api.py` in this repo. "Doc
 
 | Item | Finding |
 |---|---|
-| Access | REST `api.github.com`. Works unauthenticated; token optional (code: `_get_headers`). |
+| Access | REST `api.github.com`. Works unauthenticated; token optional (code: `_headers`). |
 | Limits | Doc ([rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api)): unauthenticated 60 req/h per IP; PAT/OAuth user token 5,000 req/h; secondary limits (≤100 concurrent requests, 900 points/min REST). GitHub may change secondary limits without notice. A shared server IP serving many users exhausts 60/h quickly. A shared server token is a shared budget and a secret-handling risk (CLAUDE.md, FR-INT-002). |
-| What the code collects | ≤10 most recently updated repos (`type=all`, so forks and other orgs included). For each repo, the **total commit count** via the `Link` header trick with **no author filter** (`_get_repo_commit_count`). |
-| Defect for feature validity | That count is all committers' commits, not the student's. A fork or team repo inflates "student commits". Verified from code; effect size not measured. |
-| `commit_date` | Set to the repo's `pushed_at` (code). That is a repo-level timestamp, not a commit date. Time-window features built on it are not a valid activity timeline. |
+| What the code collects | Code: `ingest/github_api.py` (`github-rest-v1`). Repos from `/users/{u}/repos` with `type=owner`, `sort=pushed`, forks dropped client-side, up to 3 pages of 100, then capped at `MAX_REPOS = 10` (most recently pushed first; truncation marks the run partial). For each repo, the **lifetime** count of commits with `author=<username>` (`_commit_count`: `per_page=1` plus the `Link` `rel="last"` page number; 409 = empty repo = 0). Also a `github_public_repo_count` observation. |
+| Remaining limits for feature validity | The count is lifetime per repo, not windowed, so it is not an activity timeline. Attribution relies on GitHub matching the `author` filter to the account; unlinked-email loss is **unverified**. Repos outside the 10 most recently pushed owned repos, and org repos, are not counted. The earlier version (no author filter, `type=all`, forks included) is superseded; the all-committers defect no longer applies to the current code. Effect sizes not measured. |
+| `event_at` | Set to the repo's `pushed_at` with `event_at_precision = repo_push` (`unknown` if absent). That is a repo-level timestamp, not a commit date. Time-window features built on it are not a valid activity timeline. |
 | Historical activity | **Observable** if collected properly. List-commits supports `author`, `since`, `until`, 100 per page ([commits docs](https://docs.github.com/en/enterprise-server@3.21/rest/commits/commits); that is the Enterprise Server page, so github.com behaviour is unverified). Commits made under an email not linked to the account are likely not attributed (unverified). The contributor-stats endpoint gives weekly commits per contributor but may answer 202 while computing, and zeroes additions/deletions on repos with ≥10,000 commits (from a search summary of the docs; verify). |
 | Not observable | Private repos (without OAuth), commits under unlinked emails, code quality, review activity, work outside GitHub. Squash-merges hide commit counts. |
 | Must stay unavailable | Per-day activity before collection, inferred from aggregates. Student-authored commit counts when only repo totals were fetched. Private activity under a public-only connection. |
-| Failure behaviour required | Distinguish 404 (no such user), empty profile, rate limit, and network error. The current silent synthetic fallback (D-03) must go. |
+| Failure behaviour | Code maps 404 to `not_found`, rate limits to `rate_limited`, 401/403 to `forbidden`, other failures to `unavailable`/`malformed`, and raises `ProviderError`; timeouts/5xx get 3 bounded attempts. If every per-repo lookup fails the run fails; partial failures set `partial`. No synthetic fallback in this adapter. Behaviour against live GitHub not exercised here (unverified). |
 | Terms / retention | GitHub ToS and API terms not reviewed in this review. **Open item.** |
-| Feature suitability | Suitable with author-filtered queries: active weeks, recency of last authored commit, repo/language breadth, authored commits in a window (cost ≥1 request per repo per page). Not suitable: "total commits per repo" as currently defined. |
+| Feature suitability | Lifetime authored commits per repo (current) is usable as a labelled aggregate. Active weeks, recency of last authored commit and windowed counts need dated commits, which the current collector does not fetch (cost ≥1 request per repo per page). See `docs/ml/experiment-protocol.md` §B for the proposed GraphQL collector (unverified). |
 
 ## 2. LeetCode
 
@@ -39,7 +39,7 @@ Access date: 2026-10-13. "Code" = read from `ingest/*_api.py` in this repo. "Doc
 | LeetCode solved counts by difficulty | aggregate, observed at fetch time |
 | LeetCode per-problem rows and `solved_at` | **synthetic** (current code) |
 | GitHub repo list, `pushed_at` | observed (repo-level) |
-| GitHub per-repo total commits | observed, not user-attributed |
+| GitHub per-repo lifetime authored commits (`author` filter) | observed; attribution loss for unlinked emails unverified |
 | GitHub author-filtered commit timestamps | observable, not currently collected |
 | CGPA | user-entered, unverified |
 | `ingest/coding.py`, `ingest/github.py`, `seed.sql` | synthetic fixtures |
@@ -47,7 +47,7 @@ Access date: 2026-10-13. "Code" = read from `ingest/*_api.py` in this repo. "Doc
 
 ## 4. Consequences
 
-1. Of the five current features, only `total_problems`, `avg_difficulty` (aggregate) and `cgpa` (user-entered) are defensible as-is. `consistency_score` is fabricated for real LeetCode users. `commit_frequency` is mis-attributed and mis-dated.
+1. Of the five current features, only `total_problems`, `avg_difficulty` (aggregate) and `cgpa` (user-entered) are defensible as-is. `consistency_score` is fabricated for real LeetCode users. `commit_frequency` is dated by repo `pushed_at` (precision `repo_push`), not by commit; its author attribution depends on the unverified `author` match.
 2. A reliable time series exists only for GitHub (re-collected properly) and for PIS's own future snapshots.
 3. No source provides placement outcomes.
 
