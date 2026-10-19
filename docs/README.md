@@ -17,6 +17,7 @@ Docs describe the repository as it is. Start with [architecture/current-state.md
 | | [dataset-card](ml/dataset-card.md) | demo dataset |
 | | [experiment-protocol](ml/experiment-protocol.md) | runner (implemented) and proposed RQ (not approved) |
 | | [baseline-report](ml/baseline-report.md) | synthetic smoke-test results |
+| | [forecast-report](ml/forecast-report.md) | RQ1 forecast pipeline; not run on real data |
 | | [model-lifecycle](ml/model-lifecycle.md) | bundles, registry, assessments, rollback |
 | Security | [auth-architecture](security/auth-architecture.md) | token verification, roles |
 | | [desktop-session](security/desktop-session.md) | OIDC + PKCE sign-in |
