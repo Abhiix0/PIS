@@ -120,6 +120,60 @@ def test_empty_profile_is_success_with_measured_zero(user):
     assert rows == [("github_public_repo_count", None, 0, "observed", "measured_zero", True)]
 
 
+def cal(days):
+    return [
+        Observation(
+            "github",
+            "github_contribution_day",
+            n,
+            granularity="event",
+            source_object_id=d,
+            event_at=datetime.fromisoformat(d + "T00:00:00+00:00"),
+            event_at_precision="day",
+        )
+        for d, n in days
+    ]
+
+
+def test_calendar_flag_off_fetches_no_days(user, monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_CALENDAR_ENABLED", False)
+    with with_adapter(gh()), patch("ingest.github_api.fetch_github_calendar_observations") as c:
+        run = user.sync().json()
+    assert run["status"] == "succeeded" and c.call_count == 0
+
+
+def test_calendar_flag_on_stores_days_next_to_existing_observations(user, monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_CALENDAR_ENABLED", True)
+    days = cal([("2024-03-01", 0), ("2024-03-02", 5)])
+    with (
+        with_adapter(gh(("a", 1))),
+        patch("ingest.github_api.fetch_github_calendar_observations", return_value=(days, False)),
+    ):
+        run = user.sync().json()
+    assert run["status"] == "succeeded" and run["records_created"] == 4
+    rows = {(r[0], r[1]): (r[2], r[4]) for r in observations_of(user)}
+    assert rows[("github_contribution_day", "2024-03-01")] == (0, "measured_zero")
+    assert rows[("github_contribution_day", "2024-03-02")] == (5, "present")
+    assert rows[("github_repo_commit_count", "a")] == (1, "present")
+
+
+def test_calendar_failure_keeps_existing_observations_and_marks_run_partial(user, monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_CALENDAR_ENABLED", True)
+    with (
+        with_adapter(gh(("a", 1))),
+        patch(
+            "ingest.github_api.fetch_github_calendar_observations",
+            side_effect=ProviderError("rate_limited"),
+        ),
+    ):
+        run = user.sync().json()
+    assert run["status"] == "partial" and run["safe_error_code"] == "partial_result"
+    assert {r[0] for r in observations_of(user)} == {
+        "github_public_repo_count",
+        "github_repo_commit_count",
+    }
+
+
 @pytest.mark.parametrize(
     "err,code",
     [

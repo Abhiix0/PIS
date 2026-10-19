@@ -168,3 +168,145 @@ def test_bad_username_never_reaches_the_network(name):
         with pytest.raises(ProviderError) as e:
             fetch_github_observations(name)
     assert e.value.code == "not_found" and g.call_count == 0
+
+
+# --- daily contribution calendar (GraphQL) ---
+from datetime import date, timedelta  # noqa: E402
+
+from ingest.github_api import CALENDAR_DAYS, fetch_github_calendar_observations  # noqa: E402
+
+TODAY = date(2026, 10, 19)
+
+
+def cal_body(counts):
+    return {
+        "data": {
+            "user": {
+                "contributionsCollection": {
+                    "contributionCalendar": {
+                        "weeks": [
+                            {"contributionDays": [{"date": d.isoformat(), "contributionCount": n}]}
+                            for d, n in counts
+                        ]
+                    }
+                }
+            }
+        }
+    }
+
+
+def full_window(n=lambda i: 0):
+    return [(TODAY - timedelta(days=CALENDAR_DAYS - 1 - i), n(i)) for i in range(CALENDAR_DAYS)]
+
+
+@pytest.fixture
+def token(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+
+
+def fetch_cal(body=None, **kw):
+    with patch("requests.post", return_value=resp(body=body, **kw)) as p:
+        return fetch_github_calendar_observations("testuser", today=TODAY), p
+
+
+def test_calendar_success_is_event_day_observations_for_a_full_window(token):
+    (obs, partial), p = fetch_cal(cal_body(full_window(lambda i: i % 3)))
+    assert partial is False and len(obs) == CALENDAR_DAYS
+    last = obs[-1]
+    assert (last.observation_type, last.source_object_id, last.granularity, last.provenance) == (
+        "github_contribution_day",
+        "2026-10-19",
+        "event",
+        "observed",
+    )
+    assert (last.event_at.isoformat(), last.event_at_precision) == (
+        "2026-10-19T00:00:00+00:00",
+        "day",
+    )
+    v = p.call_args.kwargs["json"]["variables"]
+    assert (v["u"], v["f"], v["t"]) == ("testuser", "2025-10-20T00:00:00Z", "2026-10-19T23:59:59Z")
+
+
+def test_calendar_zero_days_are_measured_zero_not_missing(token):
+    (obs, partial), _ = fetch_cal(cal_body(full_window()))
+    assert partial is False and len(obs) == CALENDAR_DAYS
+    assert {o.value_state for o in obs} == {"measured_zero"}
+
+
+def test_calendar_truncated_window_is_partial_and_gaps_are_not_filled(token):
+    (obs, partial), _ = fetch_cal(cal_body(full_window()[100:]))
+    assert partial is True and len(obs) == CALENDAR_DAYS - 100
+
+
+def test_calendar_days_outside_the_window_are_dropped(token):
+    extra = [(TODAY - timedelta(days=CALENDAR_DAYS), 9), (TODAY + timedelta(days=1), 9)]
+    (obs, _), _ = fetch_cal(cal_body(extra + full_window()))
+    assert len(obs) == CALENDAR_DAYS and all(o.value_num == 0 for o in obs)
+
+
+def test_calendar_partial_when_only_some_days_come_back(token):
+    (obs, partial), _ = fetch_cal(cal_body([(TODAY, 4)]))
+    assert partial is True and [o.value_num for o in obs] == [4]
+
+
+@pytest.mark.parametrize(
+    "status,headers,code",
+    [
+        (429, {"Retry-After": "30"}, "rate_limited"),
+        (403, {"X-RateLimit-Remaining": "0"}, "rate_limited"),
+        (404, {}, "not_found"),
+    ],
+)
+def test_calendar_http_errors_raise(token, status, headers, code):
+    with pytest.raises(ProviderError) as e:
+        fetch_cal(status=status, headers=headers)
+    assert e.value.code == code
+
+
+@pytest.mark.parametrize(
+    "errors,code",
+    [
+        ([{"type": "RATE_LIMITED"}], "rate_limited"),
+        ([{"type": "NOT_FOUND"}], "not_found"),
+        ([{"message": "total time spanned"}], "unavailable"),
+    ],
+)
+def test_calendar_graphql_errors_raise_even_with_http_200(token, errors, code):
+    with pytest.raises(ProviderError) as e:
+        fetch_cal({"errors": errors, "data": None})
+    assert e.value.code == code
+
+
+def _raw_day(day):
+    weeks = [{"contributionDays": [day]}]
+    return {
+        "data": {"user": {"contributionsCollection": {"contributionCalendar": {"weeks": weeks}}}}
+    }
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        ValueError,
+        ["x"],
+        {"data": {"user": None}},
+        cal_body([]),
+        _raw_day({"date": "nope", "contributionCount": 1}),
+        cal_body([(TODAY, -1)]),
+        cal_body([(TODAY, True)]),
+        cal_body([(TODAY, "3")]),
+        cal_body([(TODAY, 1), (TODAY, 1)]),
+    ],
+)
+def test_calendar_malformed_raises_never_returns_empty(token, body):
+    with pytest.raises(ProviderError) as e:
+        fetch_cal(body)
+    assert e.value.code == "malformed"
+
+
+def test_calendar_without_server_token_is_disabled_and_never_calls_out(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    with patch("requests.post") as p:
+        with pytest.raises(ProviderError) as e:
+            fetch_github_calendar_observations("testuser", today=TODAY)
+    assert e.value.code == "disabled" and p.call_count == 0

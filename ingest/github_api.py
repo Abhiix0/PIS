@@ -8,7 +8,7 @@ import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 
 import requests
 
@@ -24,6 +24,15 @@ _PAGE_SIZE = 100
 _MAX_PAGES = 3
 _ATTEMPTS = 3  # bounded retries, only for timeouts and 5xx
 _BACKOFF = 1.0  # seconds, doubled per attempt
+GRAPHQL_URL = f"{GITHUB_API_BASE}/graphql"
+CALENDAR_DAYS = (
+    365  # docs/research/github-calendar-spike.md: spans up to 1 year accepted, 400 days rejected
+)
+CALENDAR_PAYLOAD_VERSION = "github-graphql-calendar-v1"
+_CALENDAR_QUERY = (
+    "query($u:String!,$f:DateTime!,$t:DateTime!){user(login:$u){contributionsCollection(from:$f,to:$t)"
+    "{contributionCalendar{weeks{contributionDays{date contributionCount}}}}}}"
+)
 
 
 def _headers() -> dict:
@@ -36,11 +45,15 @@ def _headers() -> dict:
     return headers
 
 
-def _get(url: str, params: dict) -> requests.Response:
+def _get(url: str, params: dict | None, body: dict | None = None) -> requests.Response:
+    """GET with bounded retries; a `body` makes it a POST (GraphQL)."""
     last = ProviderError("unavailable")
     for attempt in range(_ATTEMPTS):
         try:
-            resp = requests.get(url, headers=_headers(), params=params, timeout=10)
+            if body is None:
+                resp = requests.get(url, headers=_headers(), params=params, timeout=10)
+            else:
+                resp = requests.post(url, headers=_headers(), json=body, timeout=10)
             if resp.status_code < 500:
                 return resp
         except (requests.Timeout, requests.ConnectionError):
@@ -173,3 +186,80 @@ def fetch_github_observations(username: str) -> tuple[list[Observation], bool]:
             )
         )
     return obs, partial
+
+
+def fetch_github_calendar_observations(
+    username: str, today: date | None = None
+) -> tuple[list[Observation], bool]:
+    """Daily contribution counts for the last CALENDAR_DAYS UTC days ending `today`. Returns (observations, partial).
+
+    A day the provider reports with 0 is a measured zero; a day it does not report is absent, never zero.
+    partial=True means the calendar had fewer days than the window. Anything else wrong raises ProviderError.
+    """
+    if not USERNAME_RE.match(username or ""):
+        raise ProviderError("not_found", "invalid GitHub username")
+    if "Authorization" not in _headers():
+        raise ProviderError("disabled", "GitHub GraphQL needs a server GITHUB_TOKEN")
+    today = today or datetime.now(UTC).date()
+    first = today - timedelta(days=CALENDAR_DAYS - 1)
+    # exact UTC dates need UTC-midnight bounds (spike: "Practical rule")
+    frm = f"{first.isoformat()}T00:00:00Z"
+    to = f"{today.isoformat()}T23:59:59Z"
+    resp = _get(
+        GRAPHQL_URL,
+        None,
+        {"query": _CALENDAR_QUERY, "variables": {"u": username, "f": frm, "t": to}},
+    )
+    _check(resp)
+    body = _json(resp)
+    if not isinstance(body, dict):
+        raise ProviderError("malformed", "GraphQL response has unexpected shape")
+    errors = body.get("errors")
+    if (
+        errors
+    ):  # GraphQL reports failures with HTTP 200; the error types are from GitHub docs, not observed
+        types = {e.get("type") for e in errors if isinstance(e, dict)}
+        if "NOT_FOUND" in types:
+            raise ProviderError("not_found")
+        if "RATE_LIMITED" in types:
+            raise ProviderError("rate_limited")
+        raise ProviderError("unavailable", "GraphQL error")
+    try:
+        raw = [
+            d
+            for w in body["data"]["user"]["contributionsCollection"]["contributionCalendar"][
+                "weeks"
+            ]
+            for d in w["contributionDays"]
+        ]
+    except (KeyError, TypeError):
+        raise ProviderError("malformed", "calendar missing from response") from None
+
+    counts: dict[date, int] = {}
+    for d in raw:
+        try:
+            day, n = date.fromisoformat(d["date"]), d["contributionCount"]
+        except (KeyError, TypeError, ValueError):
+            raise ProviderError("malformed", "calendar day has unexpected shape") from None
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise ProviderError("malformed", "contributionCount is not a non-negative integer")
+        if day in counts:
+            raise ProviderError("malformed", "calendar day listed twice")
+        if first <= day <= today:
+            counts[day] = n
+    if not counts:
+        raise ProviderError("malformed", "calendar has no days in the window")
+    obs = [
+        Observation(
+            "github",
+            "github_contribution_day",
+            n,
+            granularity="event",
+            source_object_id=day.isoformat(),
+            event_at=datetime(day.year, day.month, day.day, tzinfo=UTC),
+            event_at_precision="day",
+            payload_version=CALENDAR_PAYLOAD_VERSION,
+        )
+        for day, n in sorted(counts.items())
+    ]
+    return obs, len(counts) < CALENDAR_DAYS

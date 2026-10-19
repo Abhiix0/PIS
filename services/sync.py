@@ -17,8 +17,23 @@ from services import privacy
 INGESTION_VERSION = "ingest-v1"
 _STALE_RUN_MINUTES = 15  # a 'running' row older than this is a dead worker, not a live sync
 
+
+def _fetch_github(username: str):
+    observations, partial = github_api.fetch_github_observations(username)
+    if config.GITHUB_CALENDAR_ENABLED:
+        try:
+            days, days_partial = github_api.fetch_github_calendar_observations(username)
+            observations, partial = observations + days, partial or days_partial
+        except (
+            ProviderError
+        ) as e:  # the existing observations are still good: keep them, mark the run partial
+            logger.warning("github_calendar_failed", extra={"error_code": e.code})
+            partial = True
+    return observations, partial
+
+
 _ADAPTERS = {  # looked up at call time so tests can patch the fetchers
-    "github": (lambda u: github_api.fetch_github_observations(u), github_api.USERNAME_RE),
+    "github": (_fetch_github, github_api.USERNAME_RE),
     "leetcode": (lambda u: leetcode_api.fetch_leetcode_observations(u), leetcode_api.USERNAME_RE),
 }
 

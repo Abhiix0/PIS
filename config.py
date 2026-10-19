@@ -22,6 +22,8 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 LEETCODE_INTEGRATION_ENABLED = (
     os.getenv("LEETCODE_INTEGRATION_ENABLED", "false").strip().lower() == "true"
 )
+# Daily contribution calendar (GraphQL, needs GITHUB_TOKEN): off until the spike's open items are cleared.
+GITHUB_CALENDAR_ENABLED = os.getenv("GITHUB_CALENDAR_ENABLED", "false").strip().lower() == "true"
 SYNC_COOLDOWN_SECONDS = int(
     os.getenv("SYNC_COOLDOWN_SECONDS", "300")
 )  # per connection, counts failed attempts too

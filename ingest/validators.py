@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 OBSERVATION_TYPES = {
     "github_public_repo_count",
     "github_repo_commit_count",
+    "github_contribution_day",
     "leetcode_solved_easy",
     "leetcode_solved_medium",
     "leetcode_solved_hard",
@@ -43,3 +44,11 @@ def validate_observation(o) -> None:
             raise ValueError("bad_event_at: before 2008")
     elif o.event_at_precision != "unknown":
         raise ValueError("bad_event_at: precision claimed without a timestamp")
+    if o.observation_type == "github_contribution_day" and not (
+        o.granularity == "event"
+        and o.event_at_precision == "day"
+        and o.source_object_id == o.event_at.date().isoformat()
+    ):
+        raise ValueError(
+            "bad_source_id: day observation needs event granularity, day precision, date id"
+        )

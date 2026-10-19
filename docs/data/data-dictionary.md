@@ -30,6 +30,7 @@ SQL source of truth: `sql/feature_engineering.sql` (cohort) and `sql/feature_eng
 |---|---|---|---|---|---|
 | `github_public_repo_count` | github | Public non-fork repos enumerated (≤ 10) | aggregate | NULL | `measured_zero` for an account with none. Truncated at the cap ⇒ run is `partial`. |
 | `github_repo_commit_count` | github | Commits by the user in one repo | aggregate | repo `pushed_at`, precision `repo_push` | `source_object_id` = repo name. |
+| `github_contribution_day` | github | Contribution count for one UTC day from GitHub's `contributionCalendar` (GraphQL) | event | the date at 00:00 UTC, precision `day` | `source_object_id` = ISO date. A reported 0 is `measured_zero`; a day GitHub does not return is absent, never zero. Last 365 UTC days incl. today; fewer days returned ⇒ run is `partial`. Off unless `GITHUB_CALENDAR_ENABLED=true` and a server `GITHUB_TOKEN` is set. Whether private-repo contributions are included depends on the user's profile setting: unverified for third-party users (spike). Not yet an input to any feature. |
 | `leetcode_solved_easy/medium/hard` | leetcode | Accepted-problem count by difficulty at fetch time | aggregate | NULL (precision `unknown`) | Disabled by default (`LEETCODE_INTEGRATION_ENABLED`). Time = `collected_at` only. |
 
 Ingestion/parser version: `services.sync.INGESTION_VERSION` on each `sync_runs` row; adapter payload version on each observation (`payload_version`).

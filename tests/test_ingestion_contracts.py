@@ -57,6 +57,37 @@ def test_invalid_observations_raise_with_a_rule_code(kw, rule):
     assert str(e.value).split(":")[0] == rule
 
 
+def day_obs(**kw):
+    base = dict(
+        provider="github",
+        observation_type="github_contribution_day",
+        value_num=0,
+        granularity="event",
+        source_object_id="2024-03-01",
+        event_at=PUSHED,
+        event_at_precision="day",
+    )
+    return Observation(**{**base, **kw})
+
+
+def test_contribution_day_is_valid_including_zero():
+    validate_observation(day_obs())
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(source_object_id="2024-03-02"),
+        dict(source_object_id=None),
+        dict(event_at_precision="exact"),
+        dict(granularity="aggregate"),
+    ],
+)
+def test_contribution_day_needs_matching_date_id_and_day_precision(kw):
+    with pytest.raises(ValueError):
+        validate_observation(day_obs(**kw))
+
+
 def test_every_scaled_feature_is_in_the_data_dictionary():
     doc = (ROOT / "docs" / "data" / "data-dictionary.md").read_text(encoding="utf-8")
     assert FEATURE_SCHEMA_VERSION in doc
