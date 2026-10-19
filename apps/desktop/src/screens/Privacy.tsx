@@ -67,10 +67,14 @@ export default function Privacy() {
               void act(async () => setConsent((await putPrivacy(e.target.checked)).research_consent))
             }
           />
-          Allow my data to be used for research/model training in future
+          Allow my daily GitHub activity to be used for research
         </label>
         <p className="muted">
-          Off by default. Nothing uses your data this way today; you can withdraw any time.
+          This is separate from using your data to show your own assessment, which needs no consent. If you
+          turn this on, the operator may export your daily GitHub contribution counts for research, under a
+          random code with no name, email or username. Off by default; you can turn it off any time. Turning
+          it off keeps your data out of future exports. Files already exported cannot be recalled or edited,
+          because they hold no link back to you. Deleting your account also turns this off.
         </p>
       </Card>
       <Card className="stack">
