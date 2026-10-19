@@ -1,7 +1,7 @@
 """Sync lifecycle + integrations API. Needs a DB migrated through 005 (python -m ingest.migrate); providers are mocked."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import patch
 
 import psycopg2
@@ -436,3 +436,22 @@ def test_schema_rejects_contradictory_observations(user, cols, vals):
                 f"WHERE user_id = (SELECT id FROM users WHERE auth_subject = %s)",
                 (user_obj_sub(user),),
             )
+
+
+def test_evidence_has_labelled_activity_trend_from_calendar_days(user, monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_CALENDAR_ENABLED", True)
+    end = date(2024, 6, 30)  # active only in the last 4 weeks -> trend "up"
+    days = cal([((end - timedelta(days=i)).isoformat(), 1 if i < 28 else 0) for i in range(84)])
+    with (
+        with_adapter(gh(("a", 1))),
+        patch("ingest.github_api.fetch_github_calendar_observations", return_value=(days, False)),
+    ):
+        assert user.sync().json()["status"] == "succeeded"
+    aid = user.call("post", f"{V1}/assessments").json()["id"]
+    g = user.call("get", f"{V1}/assessments/{aid}/evidence").json()["evidence"]["github"]
+    assert g["values"]["active_weeks_last_4"] == 4 and g["values"]["active_weeks_prev_8"] == 0
+    assert "github_contribution_day" not in g["values"]
+    t = g["activity_trend"]
+    assert (
+        t["direction"] == "up" and t["as_of"] == "2024-06-30" and t["provenance"] == g["provenance"]
+    )

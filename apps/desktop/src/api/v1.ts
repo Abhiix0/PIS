@@ -46,6 +46,12 @@ export interface ProviderEvidence {
   synced_at: string;
   provenance: string;
   values: Record<string, number | null>;
+  activity_trend?: {
+    direction: "up" | "flat" | "down" | null;
+    rule: string;
+    as_of: string;
+    provenance: string;
+  };
 }
 export interface Evidence {
   evidence_version: string;

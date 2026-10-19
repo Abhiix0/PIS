@@ -9,6 +9,9 @@ export const FEATURE_DEFS: Record<string, string> = {
   commits_in_sampled_repos:
     "Commits summed over the most recently pushed repositories sampled, not all-time.",
   repos_sampled: "How many repositories fed the commit total.",
+  active_weeks_last_4:
+    "Weeks (of the last 4) with at least one GitHub contribution, from the daily contribution calendar.",
+  active_weeks_prev_8: "Weeks (of the 8 before those) with at least one GitHub contribution.",
   leetcode_solved_all: "Total LeetCode problems solved (aggregate; no solve dates).",
   leetcode_solved_easy: "LeetCode Easy problems solved (aggregate).",
   leetcode_solved_medium: "LeetCode Medium problems solved (aggregate).",

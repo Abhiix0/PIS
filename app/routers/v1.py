@@ -5,12 +5,14 @@ with a +00:00 offset (the DB pool pins the session time zone to UTC).
 """
 
 import json
+from datetime import date
 from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from app.auth import Principal, current_principal, expensive
+from features.as_of import FEATURES_VERSION, activity_trend, features_as_of
 from ingest.db_connection import fetch_all, get_connection
 from services import privacy, sync
 
@@ -195,7 +197,8 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
     for provider in ("github", "leetcode"):
         cur.execute(
             """
-            SELECT o.observation_type, o.value_num::float, o.provenance::text, o.sync_run_id::text, r.completed_at
+            SELECT o.observation_type, o.value_num::float, o.provenance::text, o.sync_run_id::text, r.completed_at,
+                   o.source_object_id
             FROM source_observations o JOIN sync_runs r ON r.id = o.sync_run_id
             WHERE o.profile_id = %s AND o.provider = %s AND o.sync_run_id = (
                 SELECT sync_run_id FROM source_observations WHERE profile_id = %s AND provider = %s
@@ -208,8 +211,13 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
             ev[provider] = None
             continue
         values: dict[str, Any] = {}
-        for typ, num, _, _, _ in rows:
+        days: dict[date, int] = {}
+        for typ, num, _, _, _, obj_id in rows:
             if (
+                typ == "github_contribution_day"
+            ):  # calendar days feed the trend rule, not the flat values
+                days[date.fromisoformat(obj_id)] = int(num or 0)
+            elif (
                 typ == "github_repo_commit_count"
             ):  # per-repo rows: report the sum and how many repos fed it
                 values["commits_in_sampled_repos"] = values.get("commits_in_sampled_repos", 0) + (
@@ -218,12 +226,26 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
                 values["repos_sampled"] = values.get("repos_sampled", 0) + 1
             else:
                 values[typ] = num
-        ev[provider] = {
+        ev[provider] = block = {
             "sync_run_id": rows[0][3],
             "synced_at": rows[0][4].isoformat(),
             "provenance": rows[0][2],
             "values": values,
         }
+        if (
+            days
+        ):  # deterministic rule, no model: active weeks last 4 vs previous 8 (features/as_of.py)
+            f = features_as_of(days, max(days))
+            trend = activity_trend(f["weekly_counts"])
+            direction = trend.pop("direction")
+            values.update(trend)
+            block["activity_trend"] = {
+                "direction": direction,
+                "rule": "active weeks, last 4 vs previous 8",
+                "as_of": f["as_of"],
+                "features_version": FEATURES_VERSION,
+                "provenance": rows[0][2],
+            }
     return ev
 
 

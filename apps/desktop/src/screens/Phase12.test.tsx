@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { compare, priorities } from "../lib/assessment";
+import { FEATURE_DEFS, compare, priorities } from "../lib/assessment";
 import Integrations, { describeRun } from "./Integrations";
 import Overview from "./Overview";
 
@@ -41,6 +41,11 @@ it("refuses to compare different evidence versions and discloses coverage change
   expect(c.comparable).toBe(true);
   expect(c.notes.join()).toMatch(/github data is present in only one/);
   expect(c.deltas).toEqual([{ key: "github_public_repo_count", from: null, to: 3 }]);
+});
+
+it("defines the activity-trend evidence keys", () => {
+  expect(FEATURE_DEFS.active_weeks_last_4).toMatch(/last 4/);
+  expect(FEATURE_DEFS.active_weeks_prev_8).toMatch(/8 before/);
 });
 
 it("distinguishes provider outcomes", () => {
