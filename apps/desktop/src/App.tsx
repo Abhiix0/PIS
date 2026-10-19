@@ -53,7 +53,7 @@ function SignIn() {
       <Card className="signin-card">
         <h1>Placement Intelligence</h1>
         <p className="muted">
-          A readiness proxy score and development plan built from your public coding and GitHub activity.
+          An evidence summary and development plan built from your public coding and GitHub activity.
         </p>
         {notice && (
           <p role="alert" className="err">

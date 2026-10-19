@@ -26,8 +26,8 @@ export default function Assessment() {
         <h2>Result</h2>
         <p>
           {hasScore(a)
-            ? `Readiness proxy score ${a.readiness_score} (ML estimate).`
-            : `No ML estimate. ${a.reason}`}
+            ? `Demo formula score ${a.readiness_score} (legacy model, not a prediction).`
+            : `No score. ${a.reason}`}
         </p>
       </Card>
       <Card>

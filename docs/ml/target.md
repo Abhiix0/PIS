@@ -45,7 +45,7 @@ Proposed in `../architecture/decisions/0005-ml-direction.md` (needs human sign-o
 
 1. Path B and the wording rules above (PRD §19 #1). Outcome prediction closed; reopen conditions are in the ADR.
 2. The first ML task is RQ1 in `experiment-protocol.md` §B: forecast **active weeks** in the next 4 weeks from daily GitHub contribution counts. Isolated offline experiment, not wired into the product score.
-3. The legacy RandomForest score is a heuristic proxy, quarantined from the real-user path. Relabel or retire in UI/API copy is still open.
+3. The legacy RandomForest score is a heuristic proxy, quarantined from the real-user path. UI copy relabelled "Demo formula score" (ADR 0005, 2026-10-19); full retirement (API field) still open.
 
 Still unresolved:
 

@@ -87,7 +87,7 @@ export default function Overview() {
       )}
       <Card className="hero">
         <div>
-          <div className="eyebrow">{scored ? "Readiness proxy score" : "Readiness evidence"}</div>
+          <div className="eyebrow">{scored ? "Demo formula score" : "Readiness evidence"}</div>
           <div className="big">
             {scored ? (
               <>
@@ -100,12 +100,12 @@ export default function Overview() {
           </div>
           <p>
             {scored
-              ? `Category: ${a.category}. An ML estimate of a formula, not a placement outcome.`
+              ? `Category: ${a.category}. Legacy model of a hand-written formula, not a prediction or placement outcome.`
               : `No score yet. ${a.reason}`}
           </p>
         </div>
         <div className="stack">
-          <Badge>{scored ? "ML estimate" : "Evidence only"}</Badge>
+          <Badge>{scored ? "Legacy demo score" : "Evidence only"}</Badge>
           <RunAssessment onDone={reload} label="Run a new assessment" />
         </div>
       </Card>

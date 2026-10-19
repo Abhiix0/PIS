@@ -22,7 +22,18 @@ Status: **proposed** (needs owner sign-off; `docs/ml/target.md` §6 and `docs/ml
 - RQ1 needs a new collector, consent text and a pilot first (protocol §B4). None exist.
 - If the pilot cannot reach a defensible sample, ship rule-based, provenance-labelled gap detection only (protocol §B5).
 
+## Promotion gate (set 2026-10-19, before any test result exists)
+Promote a forecast model only if the skill-vs-persistence 95% user-bootstrap CI lower bound on the opened test is > 0 (`docs/ml/forecast-report.md`).
+- **Pass**: propose, do not implement, a bundle promotion via `ml/bundle.py` (candidate -> approve -> activate) with smoke test and rollback; list changed product copy.
+- **Fail or inconclusive**: ship rules only; keep `ml/forecast/` code.
+
+## Outcome (2026-10-19): inconclusive — rules only
+`ml/forecast/run.py` has not been run on real data; no research export exists, and synthetic data is not substituted. There is no CI, so the gate is not passed. Result: no forecast model ships; product stays rule-based and provenance-labelled. This is a missing result, not evidence that forecasting fails. Re-run the gate when a consented export exists.
+
+## Legacy RF score: relabelled, not retired
+Retiring needs API/schema changes (`readiness_score` is in `/api/v1/assessments` and the client types) and is deferred. UI copy now says "Demo formula score (legacy model, not a prediction)"; the old "ML estimate" wording is removed. Real users still get `insufficient_evidence`.
+
 ## Open items
 1. Owner approval of RQ1, baselines and split design.
 2. Recruitment and consent route.
-3. Retire vs relabel the legacy RF score in UI/API copy.
+3. Retire the legacy RF score fully (API field and demo path).
