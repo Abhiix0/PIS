@@ -40,12 +40,14 @@ make test                       # pytest inside api container (docker-compose ex
 make test-local                 # pytest tests/ -v --tb=short (needs live DB + models/)
 make health | make logs
 python -m features.compute && python -m ml.train && python -m ml.bundle bootstrap && python -m ml.predict   # entrypoint.sh boot order (train makes a candidate; activate via ml.bundle), then uvicorn app.main:app
-# No DB/models needed (using venv/Scripts/python.exe -m pytest):
+# No DB/models needed:
 pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_route_coverage.py
-make check                      # lint + mypy + pytest with coverage floor (needs DB, TEST_ADMIN_DATABASE_URL)
+make check                      # lint + mypy + pytest with coverage floor (needs DB and TEST_ADMIN_DATABASE_URL, a role that can CREATE DATABASE)
 ```
 
-ruff, venv mypy and the DB-free pytest files were run on 2026-10-18; `make up`, `make test`, `make test-local`, `make check` and the module commands need Docker/a DB and were not run then. The system `python` on the dev machine lacks `psycopg2`; use `venv/Scripts/python.exe`.
+Make targets take the interpreter via `make PY=<path-to-venv-python> ...` (default `python`, which may lack `psycopg2`). With `TEST_ADMIN_DATABASE_URL` set, the test session builds its own migrated, seeded throwaway database. `docs/architecture/audit-report.md` lists what was last run (Phase 1b: 277 backend tests, coverage 82.50%; desktop 55 tests) and what was never verified (Docker, Tauri, Terraform, remote CI, live IdP).
+
+Real users get `insufficient_evidence` from `POST /api/v1/assessments`, never a score. The GitHub daily-calendar collector is off unless `GITHUB_CALENDAR_ENABLED=true` (default `false`, needs `GITHUB_TOKEN`).
 
 ## Execution flow
 

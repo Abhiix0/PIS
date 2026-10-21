@@ -1,5 +1,7 @@
 """Auth test support: a locally generated RSA key stands in for the IdP's JWKS."""
 
+import os
+import sys
 import time
 
 import jwt
@@ -46,11 +48,14 @@ def _auth_env(monkeypatch):
 # activated. Nothing reads the repo's models/ or features/*.csv, and no test depends on another.
 @pytest.fixture(scope="session", autouse=True)
 def _test_db(tmp_path_factory):
-    import os
     import uuid
 
     admin_url = os.getenv("TEST_ADMIN_DATABASE_URL")
     if not admin_url:  # DB tests then use the ambient DATABASE_URL, or skip as before
+        msg = "TEST_ADMIN_DATABASE_URL not set: DB tests run on ambient DATABASE_URL or skip"
+        if os.getenv("CI") == "true":
+            raise RuntimeError(msg)
+        print(msg, file=sys.stderr)
         yield
         return
 

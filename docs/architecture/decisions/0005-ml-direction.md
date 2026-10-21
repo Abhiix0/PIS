@@ -5,7 +5,8 @@ Status: **proposed** (needs owner sign-off; `docs/ml/target.md` §6 and `docs/ml
 ## Context
 - No real placement outcomes exist. `sql/seed.sql` has 8 hand-written students; labels in `ml/labels.py` are a weighted formula of the same features plus N(0,5) noise (`docs/ml/target.md` §2).
 - The shipped RandomForest learns that formula, not outcomes.
-- GitHub activity is real and dated, so a next-4-week "active weeks" forecast has an observable ground truth (RQ1, `docs/ml/experiment-protocol.md` §B). The current collector stores only per-repo lifetime counts dated by `pushed_at`, so RQ1 cannot be run yet.
+- GitHub activity is real and dated, so a next-4-week "active weeks" forecast has an observable ground truth (RQ1, `docs/ml/experiment-protocol.md` §B). The default collector stores only per-repo lifetime counts dated by `pushed_at`. A daily-calendar collector exists, `fetch_github_calendar_observations` in `ingest/github_api.py` (GraphQL, last 365 UTC days, stored as `github_contribution_day`), but it is flag-gated by `GITHUB_CALENDAR_ENABLED` (default off) and needs a server `GITHUB_TOKEN`. No consented export has been run, so RQ1 has no data yet.
+- `features/as_of.py` `activity_trend` is a deterministic trend rule over weekly counts, wired into `app/routers/v1.py` (`activity_trend` block). It uses no model and produces no score.
 
 ## Decision
 1. **Path B**: PIS is transparent preparation intelligence. It makes no placement or hiring claim.

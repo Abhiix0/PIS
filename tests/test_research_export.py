@@ -72,13 +72,14 @@ def test_export_has_no_pii_only_observed_and_matching_sha(tmp_path):
     u, pid = _user(name, username)
     u.put("/me/privacy", json={"research": True})
     m, rows = _run(tmp_path)
-    text = (tmp_path / m["file"]).read_text(encoding="utf-8")
+    raw = (tmp_path / m["file"]).read_bytes()
+    text = raw.decode("utf-8")
     uid = fetch_all("SELECT user_id::text AS u FROM profiles WHERE id = %s", (pid,))[0]["u"]
     for secret in (name, username, uid, pid, "@"):
         assert secret not in text
     assert list(rows[0]) == export.COLUMNS
     assert "2026-01-03" not in text  # synthetic row excluded
-    assert m["data_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert m["data_sha256"] == hashlib.sha256(raw).hexdigest()
     assert m["rows"] == len(rows) and "email" not in json.dumps(m)
 
 

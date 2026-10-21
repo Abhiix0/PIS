@@ -1,4 +1,5 @@
 # PIS — Project Commands
+PY ?= python
 .PHONY: check check-ui lint test-unit migrate up up-detached down down-clean restart test test-local health logs clean
 
 up:
@@ -20,7 +21,7 @@ test:
 	docker-compose exec api pytest tests/ -v --tb=short
 
 lint:
-	ruff check . && ruff format --check . && mypy
+	$(PY) -m ruff check . && $(PY) -m ruff format --check . && $(PY) -m mypy
 
 test-unit:
 	pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_migrate.py -v --tb=short
@@ -30,7 +31,7 @@ migrate:
 
 # needs only DATABASE_URL + TEST_ADMIN_DATABASE_URL (role with CREATEDB); tests build a throwaway DB
 test-local:
-	pytest tests/ -v --tb=short
+	$(PY) -m pytest tests/ -v --tb=short
 
 health:
 	curl -s http://localhost:8000/health/detailed | python -m json.tool
@@ -44,7 +45,7 @@ clean:
 
 # lint + typecheck + tests with the coverage floor (.coveragerc); same as CI. DB tests need TEST_ADMIN_DATABASE_URL
 check: lint
-	python -m pytest --cov=app --cov=services --cov=ml --cov=ingest --cov-report=term-missing
+	$(PY) -m pytest --cov=app --cov=services --cov=ml --cov=ingest --cov-report=term-missing
 
 check-ui:
 	cd apps/desktop && npm run typecheck && npm run lint && npm run format && npm test
