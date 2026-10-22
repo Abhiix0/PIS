@@ -24,5 +24,5 @@ jobs:
       - run: npx tauri build
       - uses: actions/upload-artifact@v4
         with:
-          name: pis-desktop-windows-unsigned
+          name: nexgauge-desktop-windows-unsigned
           path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
