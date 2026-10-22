@@ -1,6 +1,21 @@
 # GitHub contribution calendar spike
 
-Run: 2026-10-19, own account `Abhiix0` only, script `experiments/spikes/github_calendar_spike.py` (git-ignored, raw output in `experiments/spikes/out/results.json`). Token value never printed. "verified" = observed in a real response in this run. "unverified" = not observed.
+Run: 2026-10-19, own account `Abhiix0` only, script `experiments/spikes/github_calendar_spike.py` (committed; raw output in git-ignored `experiments/spikes/out/`). Token value never printed. "verified" = observed in a real response in this run. "unverified" = not observed.
+
+## How to run
+
+Own account only. Needs network and a token that can query your own `contributionsCollection`.
+
+```bash
+# set "Include private contributions" on your profile to ON, then:
+GITHUB_TOKEN=... GITHUB_SPIKE_USER=<your-login> SPIKE_STATE=on  python experiments/spikes/github_calendar_spike.py
+# set it to OFF, wait for GitHub to refresh, then:
+GITHUB_TOKEN=... GITHUB_SPIKE_USER=<your-login> SPIKE_STATE=off python experiments/spikes/github_calendar_spike.py
+```
+
+The script reads only env (no `.env`), redacts the token from stdout and the saved JSON, and writes `experiments/spikes/out/results_<state>.json`. It probes windows of 30 to 730 days (incl. 367/370/380/390/400), timezone offsets, REST vs GraphQL for one public repo, and rate-limit headers around a rejected request. It does not probe non-default branches, forks or merge commits.
+
+**Status of the 2026-10-22 re-run: not run.** The session that updated this script had no `GITHUB_TOKEN` or `GITHUB_SPIKE_USER`, so no new observations exist. Every row below is from the 2026-10-19 run or unverified; none of the new probes (367-390 days, rejected-request budget, ON/OFF comparison) has a result yet.
 
 ## Auth and permissions
 
@@ -60,13 +75,13 @@ Pending: owner toggles the setting, then rerun the script and record `total`, `r
 - Users other than `Abhiix0` (by instruction).
 - Hidden-private-contributions behavior for a third-party user: unverified. Expect a user viewed by someone else to expose only public counts plus a restricted count, but this was not observed.
 
-## Terms pages to read before shipping
+## Terms to review (manual)
 
-- https://docs.github.com/en/site-policy/github-terms/github-terms-of-service (API terms, section H)
+Read these yourself; no interpretation here. URLs were written from memory and not fetched; confirm they resolve.
+
+- https://docs.github.com/en/site-policy/github-terms/github-terms-of-service (section on API terms)
 - https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies
 - https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
 - https://docs.github.com/en/graphql/overview/rate-limits-and-node-limits-for-the-graphql-api
 - https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api
 - https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-github-profile/managing-contribution-settings-on-your-profile/showing-your-private-contributions-and-achievements-on-your-profile
-
-URLs written from memory and not fetched. Confirm they resolve.

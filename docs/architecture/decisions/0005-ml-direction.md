@@ -23,10 +23,15 @@ Status: **proposed** (needs owner sign-off; `docs/ml/target.md` §6 and `docs/ml
 - RQ1 needs a new collector, consent text and a pilot first (protocol §B4). None exist.
 - If the pilot cannot reach a defensible sample, ship rule-based, provenance-labelled gap detection only (protocol §B5).
 
-## Promotion gate (set 2026-10-19, before any test result exists)
-Promote a forecast model only if the skill-vs-persistence 95% user-bootstrap CI lower bound on the opened test is > 0 (`docs/ml/forecast-report.md`).
+## Promotion criterion (owner decision 2026-10-22, pre-registered before any result exists)
+Replaces the earlier CI-only gate. On the opened user-disjoint test set (`docs/ml/forecast-report.md`), with skill = 1 - MAE_model / MAE_persistence, promote a forecast model only if **both** hold:
+- skill >= 0.10;
+- the lower bound of the user-level 95% bootstrap CI of skill is > 0.
+
+Otherwise ship rules only. No tree or other complex model unless the existing `tree_gate` (`ml/forecast/run.py`) passes.
 - **Pass**: propose, do not implement, a bundle promotion via `ml/bundle.py` (candidate -> approve -> activate) with smoke test and rollback; list changed product copy.
 - **Fail or inconclusive**: ship rules only; keep `ml/forecast/` code.
+- `ml/forecast/run.py` reports `skill_vs_persistence` and `skill_ci95_user_bootstrap` but does not yet evaluate the 0.10 threshold; apply it by hand to that JSON until a check is added.
 
 ## Outcome (2026-10-19): inconclusive — rules only
 `ml/forecast/run.py` has not been run on real data; no research export exists, and synthetic data is not substituted. There is no CI, so the gate is not passed. Result: no forecast model ships; product stays rule-based and provenance-labelled. This is a missing result, not evidence that forecasting fails. Re-run the gate when a consented export exists.

@@ -21,4 +21,7 @@ features/*.csv
 # experiments: keep only the baseline report linked from docs/ml/baseline-report.md
 experiments/*
 !experiments/baseline-synthetic-a7d069146a57.json
+!experiments/spikes/
+experiments/spikes/*
+!experiments/spikes/github_calendar_spike.py
 .coverage
