@@ -1,4 +1,4 @@
-# PIS current state
+# NexGauge current state
 
 Description of the repository on branch `revamp`, written from the source. **Verified** = read in code. **Unverified** = inferred, or depends on running the stack, which this document did not do. Route list: `api-surface.md`. Limits and open decisions are at the end.
 

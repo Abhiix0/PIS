@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
     if not (config.AUTH_ISSUER and config.AUTH_AUDIENCE and config.AUTH_JWKS_URL):
         print("[STARTUP WARNING] AUTH_* not configured. Every protected endpoint will return 401.")
 
-    print("PIS API started successfully")
+    print("NexGauge API started successfully")
     print("  Database: connected")
     print(f"  Model:    {active_model} (verified)")
     print("  Docs:     http://localhost:8000/docs")
@@ -74,12 +74,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Placement Intelligence System",
+    title="NexGauge API",
     version="1.0.0",
     description="""
-    A data-driven platform that evaluates student placement readiness
-    using SQL feature engineering, ML prediction, and a hybrid
-    rule + ML insight engine.
+    NexGauge, a Personal Career Intelligence System. Shows a placement-readiness
+    proxy score from SQL feature engineering and ML. It is not a prediction of
+    hiring or placement outcomes.
     """,
     docs_url="/docs",
     redoc_url="/redoc",

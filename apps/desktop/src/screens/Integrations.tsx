@@ -158,7 +158,7 @@ function Provider({
           />
           <label className="check">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />I agree
-            PIS may read the public data listed above for this account.
+            NexGauge may read the public data listed above for this account.
           </label>
           <div>
             <Button type="submit" disabled={busy || !consent || !username.trim()}>

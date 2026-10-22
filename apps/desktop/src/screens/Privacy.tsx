@@ -31,7 +31,7 @@ export default function Privacy() {
       const blob = new Blob([JSON.stringify(await exportMyData(), null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "pis-export.json";
+      a.download = "nexgauge-export.json";
       a.click();
       URL.revokeObjectURL(a.href);
       setMsg("Export downloaded.");

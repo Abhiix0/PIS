@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: pis_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pis_local_dev}  # local-dev default; set a real one outside local
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

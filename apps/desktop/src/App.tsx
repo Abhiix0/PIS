@@ -51,7 +51,7 @@ function SignIn() {
   return (
     <main className="signin">
       <Card className="signin-card">
-        <h1>Placement Intelligence</h1>
+        <h1>NexGauge</h1>
         <p className="muted">
           An evidence summary and development plan built from your public coding and GitHub activity.
         </p>
@@ -97,7 +97,7 @@ function Shell() {
     );
   if (state !== "signed-in") return <SignIn />;
   return (
-    <AppShell title="Placement Intelligence" nav={NAV} status={<Status />}>
+    <AppShell title="NexGauge" nav={NAV} status={<Status />}>
       <Routes>
         <Route path="/overview" element={<Overview />} />
         <Route path="/integrations" element={<Integrations />} />

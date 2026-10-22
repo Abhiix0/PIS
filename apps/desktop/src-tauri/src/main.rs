@@ -84,7 +84,7 @@ fn read_callback(mut s: TcpStream) -> Option<String> {
     s.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let mut line = String::new();
     BufReader::new(&s).read_line(&mut line).ok()?;
-    let body = "<html><body>You can close this window and return to Placement Intelligence.</body></html>";
+    let body = "<html><body>You can close this window and return to NexGauge.</body></html>";
     let _ = write!(
         s,
         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -103,5 +103,5 @@ fn main() {
         .manage(Loopback::default())
         .invoke_handler(tauri::generate_handler![token_save, token_load, token_clear, auth_listen, auth_wait])
         .run(tauri::generate_context!())
-        .expect("error while running PIS desktop");
+        .expect("error while running NexGauge desktop");
 }

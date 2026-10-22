@@ -11,7 +11,7 @@ Guidance for Claude Code in this repository. Verify files and commands against t
 
 ## Product and stack
 
-Placement Intelligence System (PIS) scores student **placement-readiness** from coding (LeetCode) and GitHub activity plus CGPA. PostgreSQL 15 (SQL feature engineering) → FastAPI (`app/`) → the desktop client (`apps/desktop/`, HTTP client of `/api/v1`). Python 3.11, scikit-learn RandomForest, pandas, `psycopg2` only (no SQLAlchemy usage, although it is in `requirements.txt`) via one `ThreadedConnectionPool` in `ingest/db_connection.py`. Docker Compose: `db`, `api`.
+NexGauge (Personal Career Intelligence System; formerly Placement Intelligence System, PIS) scores student **placement-readiness** from coding (LeetCode) and GitHub activity plus CGPA. PostgreSQL 15 (SQL feature engineering) → FastAPI (`app/`) → the desktop client (`apps/desktop/`, HTTP client of `/api/v1`). Python 3.11, scikit-learn RandomForest, pandas, `psycopg2` only (no SQLAlchemy usage, although it is in `requirements.txt`) via one `ThreadedConnectionPool` in `ingest/db_connection.py`. Docker Compose: `db`, `api`.
 
 ## Repository map
 

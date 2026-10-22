@@ -1,4 +1,4 @@
-# PIS documentation
+# NexGauge documentation
 
 Docs describe the repository as it is. Start with [architecture/current-state.md](architecture/current-state.md). Historical material is under `history/` and `product/` and may be out of date.
 

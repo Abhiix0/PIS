@@ -1,6 +1,6 @@
-# Placement Intelligence System (PIS)
+# NexGauge
 
-PIS shows a student a **placement-readiness proxy**, built from public coding (LeetCode) and GitHub activity plus CGPA. It is **not** a prediction of hiring or placement: no outcome labels exist, and the demo model learns a hand-written scoring formula (see [limitations](#limitations)).
+NexGauge, a **Personal Career Intelligence System**, shows a student a **placement-readiness proxy**, built from public coding (LeetCode) and GitHub activity plus CGPA. It is **not** a prediction of hiring or placement: no outcome labels exist, and the demo model learns a hand-written scoring formula (see [limitations](#limitations)).
 
 Stack: PostgreSQL 15 (SQL feature engineering) -> FastAPI (`app/`) -> desktop client (`apps/desktop/`, Tauri + React). Python, scikit-learn RandomForest, `psycopg2`.
 

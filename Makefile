@@ -1,4 +1,4 @@
-# PIS — Project Commands
+# NexGauge — Project Commands
 PY ?= python
 .PHONY: check check-ui lint test-unit migrate up up-detached down down-clean restart test test-local health logs clean
 
