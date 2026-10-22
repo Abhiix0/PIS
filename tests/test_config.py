@@ -72,6 +72,9 @@ def test_calendar_default_is_off():
     old = {
         k: os.environ.pop(k, None) for k in ("GITHUB_CALENDAR_ENABLED", "GITHUB_CALENDAR_APPROVED")
     }
+    saved = dict(
+        vars(config)
+    )  # reload re-reads env, wiping conftest's AUTH_* and the test DATABASE_URL
     try:
         importlib.reload(config)
         assert config.GITHUB_CALENDAR_ENABLED is False and config.GITHUB_CALENDAR_APPROVED is False
@@ -80,6 +83,8 @@ def test_calendar_default_is_off():
             if v is not None:
                 os.environ[k] = v
         importlib.reload(config)
+        vars(config).update(saved)
+        assert config.AUTH_ISSUER == saved["AUTH_ISSUER"]
 
 
 def test_errors_never_contain_secret_values(monkeypatch):
