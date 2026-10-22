@@ -24,6 +24,8 @@ LEETCODE_INTEGRATION_ENABLED = (
 )
 # Daily contribution calendar (GraphQL, needs GITHUB_TOKEN): off until the spike's open items are cleared.
 GITHUB_CALENDAR_ENABLED = os.getenv("GITHUB_CALENDAR_ENABLED", "false").strip().lower() == "true"
+# Second key for staging/production: a human must approve collecting daily activity there (see validate()).
+GITHUB_CALENDAR_APPROVED = os.getenv("GITHUB_CALENDAR_APPROVED", "false").strip().lower() == "true"
 SYNC_COOLDOWN_SECONDS = int(
     os.getenv("SYNC_COOLDOWN_SECONDS", "300")
 )  # per connection, counts failed attempts too
@@ -51,6 +53,10 @@ def validate() -> list[str]:
         ):
             if not value:
                 errors.append(f"{name} must be set in {APP_ENV}.")
+        if GITHUB_CALENDAR_ENABLED and not GITHUB_CALENDAR_APPROVED:
+            errors.append(
+                f"GITHUB_CALENDAR_ENABLED=true in {APP_ENV} also requires GITHUB_CALENDAR_APPROVED=true."
+            )
         for name, value in (("DATABASE_URL", DATABASE_URL or ""),):
             if any(p in value.lower() for p in _PLACEHOLDERS):
                 errors.append(

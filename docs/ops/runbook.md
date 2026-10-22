@@ -65,3 +65,22 @@ Sizing: API 0.5 vCPU / 1 GB, 1 task staging / 2 production; stop timeout 30 s. T
 
 ## 9. Staging acceptance (§15.6) **[todo]**
 Using synthetic/test accounts only, against the deployed staging URL: sign-in via staging IdP → create profile → connect GitHub test user → sync → assessment → export → delete account; plus unauth/forbidden checks (401/403), `/health/ready`, a forced bad release to prove auto-rollback. `tests/test_api_v1.py` can be pointed at a DB-backed local stack but has not been run against AWS.
+
+## 10. GitHub calendar collection: rate budget and pilot
+Default is off. In staging/production it needs `GITHUB_CALENDAR_ENABLED=true` **and** `GITHUB_CALENDAR_APPROVED=true` (config refuses to start otherwise), plus a server `GITHUB_TOKEN`.
+
+**Rate budget (from code; the 5000/h limit is from `docs/research/github-calendar-spike.md`, other figures are derived, not measured under load).**
+- Per sync: 1 GraphQL call (spike: cost 1) + REST: 1-3 repo-list pages (`_MAX_PAGES=3`, usually 1) + at most `MAX_REPOS=10` commit-count calls. Typical ≈ 12 REST + 1 GraphQL; worst case 13 REST + 1 GraphQL.
+- Assumptions: token has 5000 REST/h and 5000 GraphQL/h as separate buckets (spike showed `X-RateLimit-Resource: graphql`; the REST bucket is GitHub's documented default, not re-checked); retries on 5xx (up to 3 attempts per call) are ignored and add cost; one shared token for all users; the limit is per token, not per user.
+- Cooldown: `SYNC_COOLDOWN_SECONDS=300` per connection, so one user costs at most 12 syncs/h ≈ 156 REST calls/h.
+- Capacity: REST is the bottleneck. 5000 / 13 ≈ 380 syncs/h; at the cooldown cap that is ≈ 32 users syncing continuously, far more at normal use (one sync per user per day ≈ 380 users/h in a burst). The API limiter state is per process, so more than one replica multiplies the real call rate; stay at one replica during the pilot.
+- On `rate_limited` the run is `failed` or `partial`; watch the `sync_status=failed` alert (§5).
+
+**Consent text:** `apps/desktop/src/screens/Privacy.tsx` was compared with `ml/forecast/export.py`: daily counts only, consent checked at export time, per-export random salt (codes not linkable across exports), past files cannot be recalled. The wording matches; no change made. **Needs owner/legal review** before any real volunteer beyond the owner.
+
+## 11. Manual pilot procedure (dev environment only)
+1. Dev environment only (`APP_ENV=local` or a dev stack); never staging/production in this phase. Set `GITHUB_TOKEN` (never print it), `GITHUB_CALENDAR_ENABLED=true`.
+2. Own account first: sign in, create profile, connect your own public GitHub username, sync, check the run is `succeeded`/`partial` and `github_contribution_day` rows exist with `provenance=observed`. Do not turn on research consent until you have read the Privacy screen text.
+3. Volunteers only after the consent text is reviewed by the owner/legal. Each volunteer must explicitly agree beforehand (written); no one's data is collected without it. They connect their own username themselves.
+4. Research export only for users with consent set: `python -m ml.forecast.export --out <dir> --i-understand-this-exports-research-data`. Keep files outside the repo; they cannot be recalled.
+5. Stop: disconnect with data deletion or delete the account; set the flag back to `false`.

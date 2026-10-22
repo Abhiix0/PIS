@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["venv", "apps", "node_modules"]
+extend-exclude = ["venv", "apps", "node_modules", "experiments/spikes"]  # one-off spike scripts, not product code
 
 [tool.ruff.format]
 line-ending = "lf"

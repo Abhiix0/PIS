@@ -46,6 +46,42 @@ def test_deployed_rejects_missing_auth_and_placeholder_secrets(monkeypatch, env)
     assert config.validate() == []
 
 
+@pytest.mark.parametrize("env", ["local", "test", "staging", "production"])
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("approved", [False, True])
+def test_calendar_needs_approval_only_when_deployed(monkeypatch, env, enabled, approved):
+    _set(
+        monkeypatch,
+        APP_ENV=env,
+        DATABASE_URL="postgresql://u:s3cr3t-real@h/db",
+        AUTH_ISSUER="https://idp.example/",
+        AUTH_AUDIENCE="pis",
+        AUTH_JWKS_URL="https://idp.example/jwks",
+        GITHUB_CALENDAR_ENABLED=enabled,
+        GITHUB_CALENDAR_APPROVED=approved,
+    )
+    blocked = env in ("staging", "production") and enabled and not approved
+    assert any("GITHUB_CALENDAR_APPROVED" in e for e in config.validate()) is blocked
+    assert (config.validate() != []) is blocked
+
+
+def test_calendar_default_is_off():
+    import importlib
+    import os
+
+    old = {
+        k: os.environ.pop(k, None) for k in ("GITHUB_CALENDAR_ENABLED", "GITHUB_CALENDAR_APPROVED")
+    }
+    try:
+        importlib.reload(config)
+        assert config.GITHUB_CALENDAR_ENABLED is False and config.GITHUB_CALENDAR_APPROVED is False
+    finally:
+        for k, v in old.items():
+            if v is not None:
+                os.environ[k] = v
+        importlib.reload(config)
+
+
 def test_errors_never_contain_secret_values(monkeypatch):
     _set(monkeypatch, APP_ENV="production", DATABASE_URL="postgresql://u:topsecretpw@h/db")
     assert "topsecretpw" not in " ".join(config.validate())
