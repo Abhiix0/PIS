@@ -65,6 +65,7 @@ def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     scaler = MinMaxScaler()
     df_scaled[SCALE_COLS] = scaler.fit_transform(df[SCALE_COLS])
 
+    Path("models").mkdir(parents=True, exist_ok=True)
     joblib.dump(scaler, Path("models/scaler.pkl"))
     print("Scaler saved → models/scaler.pkl")
 

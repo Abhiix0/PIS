@@ -19,16 +19,28 @@ Interactive docs: http://localhost:8000/docs. Every route except `/health*` need
 
 ## Quickstart (local, no Docker)
 
-Needs Python 3.11+ and a reachable PostgreSQL 15 (`DATABASE_URL` in `.env`).
+Needs Python 3.11+ and a reachable, empty PostgreSQL 15 database.
+
+Environment variables (copy `.env.example` to `.env` and fill them in; run commands from the repo root):
+
+- `DATABASE_URL`: the database the app uses.
+- `APP_ENV=local`.
+- `SEED_DEMO_DATA=true`: loads the synthetic demo seed (local/test only).
+- `TEST_ADMIN_DATABASE_URL`: only for the test suite. Needs a role that can `CREATE DATABASE`; tests build a throwaway database.
 
 ```bash
-python -m venv venv && venv/Scripts/python.exe -m pip install -r requirements-dev.txt   # Windows venv path; use venv/bin/python on Linux/macOS
+python -m venv venv
+venv/Scripts/python.exe -m pip install -r requirements-dev.txt   # Windows venv path; use venv/bin/python on Linux/macOS
+# use that interpreter for the commands below (activate the venv, or call it by path)
 python -m ingest.migrate --seed                       # schema + demo seed (never in staging/production)
-python -m features.compute && python -m ml.train && python -m ml.bundle bootstrap
+python -m features.compute                            # creates models/ if missing
+python -m ml.train
+python -m ml.bundle bootstrap                         # local-only activation
+python -m ml.predict
 uvicorn app.main:app --reload
 ```
 
-*Unverified:* the install and the migrate/train/uvicorn chain were not run (no database available). The module entry points exist (`ingest/migrate.py`, `features/compute.py`, `ml/train.py`, `ml/bundle.py`).
+This is the `entrypoint.sh` boot order. *Unverified:* the chain has not yet been run end to end from a clean checkout.
 
 ## Tests and checks
 
