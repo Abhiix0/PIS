@@ -30,8 +30,12 @@ Liveness/readiness stay at `/health` and `/health/detailed` (unauthenticated, un
 
 `assessment_type` is `rules_assessment` when any provider dimension has values, otherwise `insufficient_evidence`. There is **no score and no composite**: `readiness_score` is null for real accounts. Implemented as rules-v1, not validated. Logic: `services/assessment.py`.
 
+`result.recommendations[]` (Phase 5, `services/recommendations.py`): fixed-priority rules, each with `id`, `rule_id` (`r1.connect` ... `r8.no_practice`), `priority`, `dimension`, `action`, `reason`, `evidence_refs[]` (dimension, value name, `sync_run_id`) and a `limitation` line. CGPA never triggers one. Thresholds are named constants, proposed and unvalidated; no claim is made that acting on a recommendation changes any outcome.
+
+`GET /assessments/{id}/compare/{other_id}`: both snapshots must belong to the caller (404 otherwise); `{id}` is the earlier. Returns per-dimension state and value deltas. Values are differenced only when `assessment_version` and `evidence_version` match; otherwise `comparable` is false, `delta` is null and `disclosures[]` says why. State changes and dimensions present in only one snapshot are disclosed. Snapshots without a `result` (older rows) are not comparable.
+
 ## Not built (no client needs them yet)
-Recommendations and progress state, assessment comparison, settings.
+Progress state beyond snapshot comparison, settings.
 
 ## Compatibility
 Root routes (`/students`, `/pipeline`, `/integrations`, `/profiles`, `/admin`, …) are unchanged and remain for Streamlit and operators. Streamlit uses only root routes and needs no change. Root integration sync is still synchronous (200 with the finished run); v1's is 202.

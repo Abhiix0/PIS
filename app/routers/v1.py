@@ -16,7 +16,7 @@ from app.auth import Principal, current_principal, expensive
 from features.as_of import FEATURES_VERSION, activity_trend, features_as_of
 from ingest.db_connection import fetch_all, get_connection
 from services import assessment as rules
-from services import privacy, sync
+from services import privacy, recommendations, sync
 
 router = APIRouter(prefix="/api/v1")
 session_router = APIRouter(tags=["Session"])  # unprefixed: the desktop client calls /auth/logout
@@ -370,6 +370,29 @@ def get_assessment(assessment_id: str, p: Principal = Depends(current_principal)
         ),
         "Assessment",
     )
+
+
+@router.get("/assessments/{assessment_id}/compare/{other_id}", tags=["Assessments"])
+def compare_assessments(
+    assessment_id: str, other_id: str, p: Principal = Depends(current_principal)
+):
+    """Compare two of the caller's snapshots: `assessment_id` is the earlier, `other_id` the later. Values are
+    differenced only when assessment and evidence versions match; otherwise that is disclosed, not hidden."""
+    rows = {
+        r["id"]: r
+        for r in fetch_all(
+            "SELECT id::text AS id, result, created_at FROM assessments WHERE id::text = ANY(%s) "
+            f"AND profile_id IN ({_MY_PROFILE})",
+            ([assessment_id, other_id], p.user_id),
+        )
+    }
+    a = _one([rows[assessment_id]] if assessment_id in rows else [], "Assessment")
+    b = _one([rows[other_id]] if other_id in rows else [], "Assessment")
+    return {
+        "from": {"id": a["id"], "created_at": a["created_at"]},
+        "to": {"id": b["id"], "created_at": b["created_at"]},
+        **recommendations.compare_results(a["result"], b["result"]),
+    }
 
 
 @router.get("/assessments/{assessment_id}/evidence", tags=["Assessments"])

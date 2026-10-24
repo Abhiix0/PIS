@@ -7,6 +7,8 @@ the rule that produced the state, a coverage line and caveats. Every threshold b
 
 from datetime import UTC, datetime
 
+from services.recommendations import recommend
+
 ASSESSMENT_VERSION = "rules-v1"
 STALE_DAYS = 7  # proposed, unvalidated: a provider import older than this is "stale"
 RESULT_TYPE = "rules_assessment"  # assessments.assessment_type when any provider dimension has data
@@ -231,6 +233,7 @@ def compute_assessment(
         "generated_at": now.isoformat(),
         "stale_after_days": STALE_DAYS,
         "dimensions": dims,
+        "recommendations": recommend(ev, dims, STALE_DAYS),
         "limitations": LIMITATIONS,
     }
 

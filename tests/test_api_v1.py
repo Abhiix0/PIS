@@ -56,6 +56,7 @@ PROTECTED = [
     ("get", "/assessments"),
     ("get", f"/assessments/{uuid.uuid4()}"),
     ("get", f"/assessments/{uuid.uuid4()}/evidence"),
+    ("get", f"/assessments/{uuid.uuid4()}/compare/{uuid.uuid4()}"),
     ("post", "/me/data-requests/deletion"),
     ("get", "/me/data-requests"),
     ("get", "/me/export"),
@@ -441,7 +442,8 @@ def test_first_login_creates_the_user_row_once():
 def test_every_route_with_an_id_hides_other_users_records(user):
     with with_adapter(gh(("a", 1))):
         rid = user.post("/integrations/github/sync").json()["id"]
-    ids = {"{assessment_id}": user.post("/assessments").json()["id"], "{run_id}": rid}
+    aid = user.post("/assessments").json()["id"]
+    ids = {"{assessment_id}": aid, "{other_id}": aid, "{run_id}": rid}
     other = U()
     other.put("/me/profile", json={"display_name": "O"})
     seen = 0
@@ -455,3 +457,18 @@ def test_every_route_with_an_id_hides_other_users_records(user):
             error_of(getattr(other, m.lower())(path), 404, "not_found")
             seen += 1
     assert seen >= 3  # assessment, evidence, sync run
+
+
+def test_compare_two_own_snapshots_and_hide_them_from_others(user):
+    first = user.post("/assessments").json()["id"]
+    with with_adapter(gh(("a", 3))):
+        user.post("/integrations/github/sync")
+    second = user.post("/assessments").json()
+    assert second["result"]["recommendations"] is not None
+    c = user.get(f"/assessments/{first}/compare/{second['id']}").json()
+    assert c["comparable"] is True and c["from"]["id"] == first and c["to"]["id"] == second["id"]
+    assert any("state changed" in n for n in c["disclosures"])
+    other = U()
+    other.put("/me/profile", json={"display_name": "O"})
+    error_of(other.get(f"/assessments/{first}/compare/{second['id']}"), 404, "not_found")
+    error_of(user.get(f"/assessments/{first}/compare/{uuid.uuid4()}"), 404, "not_found")

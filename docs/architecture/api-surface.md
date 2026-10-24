@@ -27,6 +27,7 @@ Every error, on every route, is `{"error": {"code", "message", "request_id"}}` (
 | `POST /api/v1/assessments` | user | caller |
 | `GET /api/v1/assessments` | user | caller |
 | `GET /api/v1/assessments/{assessment_id}` | user | caller |
+| `GET /api/v1/assessments/{assessment_id}/compare/{other_id}` | user | caller |
 | `GET /api/v1/assessments/{assessment_id}/evidence` | user | caller |
 | `POST /auth/logout` | user | caller |
 | `POST /admin/retrain` | operator | system |
