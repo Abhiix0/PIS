@@ -30,9 +30,9 @@ Staging and production must use different DB instances, secrets, IdP audience an
 `PRIVATE_SUBNET=… APP_SG=… deploy/aws/release.sh <env> <region> <ecr-uri>`
 Flow: clean-tree check → build image tagged by git SHA → push → register migrate task → run migration as one-off Fargate task → abort service update if exit code ≠ 0 → roll service → wait for stable. ECS circuit breaker auto-rolls back if new tasks fail `/health/ready`.
 
-**Model bundles:** the API refuses to start without a verified active bundle (`ml/bundle.py`). The image must contain `models/bundles/<version>/` for a bundle already approved/activated in that environment's `model_versions` table. Training at boot is disabled in deployed envs. Promote with `python -m ml.bundle approve/activate` against the target DB as an operator action, before the release. The first-ever deploy to a fresh DB therefore needs: migrate → activate bundle → roll service. **[todo — not rehearsed]**
+**Model bundles:** staging/production do not require a model. Real-user assessments never use it, so startup and `/health/ready` need only valid config, a reachable DB and applied migrations; `/health/detailed` reports `model_version: "none"` when no bundle is active. Local/test still fail fast without a verified active bundle (`ml/bundle.py`). Bundles are not in the image (`.dockerignore`); promote one only as an operator action against the target DB (`python -m ml.bundle approve/activate`). **[unverified: Docker not run]**
 
-Probes: ALB → `/health/ready` (DB + migrations applied + active model, 503 otherwise); container → `/health`.
+Probes: ALB → `/health/ready` (DB + migrations applied, 503 otherwise; local also needs an active model); container → `/health`.
 Sizing: API 0.5 vCPU / 1 GB, 1 task staging / 2 production; stop timeout 30 s. Tune after load measurement (not done).
 
 ## 4. Rollback **[todo — rehearse in staging]**

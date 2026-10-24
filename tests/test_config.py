@@ -96,3 +96,17 @@ def test_seed_only_outside_deployed_envs(monkeypatch):
     for env, ok in [("local", True), ("test", True), ("staging", False), ("production", False)]:
         _set(monkeypatch, APP_ENV=env)
         assert config.seed_allowed() is ok
+
+
+@pytest.mark.parametrize("env,bad", [("local", False), ("staging", True), ("production", True)])
+def test_wildcard_cors_rejected_when_deployed(monkeypatch, env, bad):
+    _set(
+        monkeypatch,
+        APP_ENV=env,
+        DATABASE_URL="postgresql://u:s3cr3t-real@h/db",
+        AUTH_ISSUER="https://idp.example/",
+        AUTH_AUDIENCE="pis",
+        AUTH_JWKS_URL="https://idp.example/jwks",
+        CORS_ALLOWED_ORIGINS=["*"],
+    )
+    assert any("CORS_ALLOWED_ORIGINS" in e for e in config.validate()) is bad

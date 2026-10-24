@@ -17,6 +17,10 @@ AUTH_ROLE_CLAIM = os.getenv(
     "AUTH_ROLE_CLAIM", "pis_roles"
 )  # list claim; "pis_operator" grants operator
 MAX_BODY_BYTES = 64 * 1024
+# Browser origins allowed cross-origin access (the desktop WebView). Empty = none.
+CORS_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 # LeetCode has no official API and its terms are unverified (PRD 19#4): off until a human clears it.
 LEETCODE_INTEGRATION_ENABLED = (
@@ -46,6 +50,8 @@ def validate() -> list[str]:
     if not DATABASE_URL:
         errors.append("DATABASE_URL is not set (see .env.example).")
     if is_deployed():
+        if "*" in CORS_ALLOWED_ORIGINS:
+            errors.append(f"CORS_ALLOWED_ORIGINS must not contain '*' in {APP_ENV}.")
         for name, value in (
             ("AUTH_ISSUER", AUTH_ISSUER),
             ("AUTH_AUDIENCE", AUTH_AUDIENCE),

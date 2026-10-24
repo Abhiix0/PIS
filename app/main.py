@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -46,7 +47,8 @@ async def lifespan(app: FastAPI):
                 errors.append(f"Could not check migrations: {type(e).__name__}")
 
     active_model = None
-    if not errors:
+    # Real-user assessments never use the model, so deployed envs don't require one.
+    if not errors and not config.is_deployed():
         try:
             active_model = load_active().version  # verifies checksums and feature schema
         except Exception as e:
@@ -66,7 +68,7 @@ async def lifespan(app: FastAPI):
 
     print("NexGauge API started successfully")
     print("  Database: connected")
-    print(f"  Model:    {active_model} (verified)")
+    print(f"  Model:    {active_model or 'not required in ' + config.APP_ENV}")
     print("  Docs:     http://localhost:8000/docs")
 
     yield
@@ -146,7 +148,7 @@ def health():
 
 @app.get("/health/ready", tags=["System"])
 def health_ready():
-    """Readiness probe (load balancer): 503 unless the DB answers, migrations are applied and a model is active."""
+    """Readiness probe (load balancer): 503 unless the DB answers and migrations are applied; locally also needs an active model."""
     problems = []
     try:
         with get_connection() as conn:
@@ -154,10 +156,11 @@ def health_ready():
                 problems.append("migrations")
     except Exception:
         problems.append("database")
-    try:
-        active_version()
-    except Exception:
-        problems.append("model")
+    if not config.is_deployed():
+        try:
+            active_version()
+        except Exception:
+            problems.append("model")
     if problems:
         return JSONResponse(status_code=503, content={"status": "unready", "problems": problems})
     return {"status": "ready"}
@@ -171,6 +174,9 @@ def health_detailed():
         model_version = active_version()
     except Exception:
         model_version = None
+    model_ok = model_version is not None or config.is_deployed()
+    if config.is_deployed() and model_version is None:
+        model_version = "none"
 
     features_freshness = None
     student_count = 0
@@ -192,7 +198,7 @@ def health_detailed():
     uptime_seconds = round(time.time() - _startup_time)
 
     return {
-        "status": "ok" if db_ok and model_version else "degraded",
+        "status": "ok" if db_ok and model_ok else "degraded",
         "version": app.version,
         "uptime_seconds": uptime_seconds,
         "database": "connected" if db_ok else "disconnected",
@@ -238,3 +244,13 @@ async def log_requests(request: Request, call_next):
         },
     )
     return response
+
+
+# Added last so it is the outermost middleware: preflights are answered before auth and errors keep the envelope.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.CORS_ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
+)
