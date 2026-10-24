@@ -1,18 +1,20 @@
-import { useState } from "react";
-import { createAssessment } from "../api/v1";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { createAssessment, getIntegrations, getMe, type Integration } from "../api/v1";
 import {
   Badge,
   Banner,
   Button,
   Card,
-  EmptyState,
   ErrorState,
   Loading,
   PageHeader,
   StatCard,
+  StatusBadge,
 } from "../components";
-import { DISCLAIMER, hasScore, isStale, priorities } from "../lib/assessment";
+import { DISCLAIMER, STATE_LABEL, hasScore, needsAttention } from "../lib/assessment";
 import { friendly } from "./Dashboard";
+import { LegacyNotice, RecommendationList } from "./Dimensions";
 import { useLatest } from "./useLatest";
 
 export function RunAssessment({
@@ -52,10 +54,65 @@ export function RunAssessment({
   );
 }
 
-const age = (iso: string) => {
-  const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5);
-  return d <= 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`;
-};
+// First run. Progress is read from the server (profile, connection, last sync), so quitting midway resumes here.
+function GetStarted({ onDone }: { onDone: () => void }) {
+  const [s, setS] = useState<{ profile: boolean; items: Integration[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    let live = true;
+    Promise.all([getMe(), getIntegrations()]).then(
+      ([me, i]) => live && setS({ profile: !!me.profile, items: i.items }),
+      (e) => live && setError(friendly(e)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [n]);
+  if (error)
+    return (
+      <ErrorState
+        message={error}
+        onRetry={() => {
+          setError(null);
+          setN(n + 1);
+        }}
+      />
+    );
+  if (!s) return <Loading />;
+  const connected = s.items.some((i) => i.provider === "github");
+  const synced = s.items.some((i) => i.last_success_at);
+  const steps = [
+    { done: s.profile, label: "Create your profile", to: "/dashboard", go: "Open Profile" },
+    { done: connected, label: "Connect your GitHub username", to: "/integrations", go: "Open Integrations" },
+    { done: synced, label: "Run your first sync", to: "/integrations", go: "Open Integrations" },
+  ];
+  const next = steps.findIndex((x) => !x.done);
+  return (
+    <Card className="stack" aria-labelledby="h-start">
+      <h2 id="h-start">Get started</h2>
+      <p>Four steps to your first assessment. You can stop and come back; progress is saved on the server.</p>
+      <ol>
+        {steps.map((x, i) => (
+          <li key={x.label}>
+            {x.done ? "✓ " : ""}
+            {x.label} {x.done && <Badge tone="ok">Done</Badge>}
+            {i === next && (
+              <>
+                {" "}
+                <Badge tone="info">Next</Badge> <Link to={x.to}>{x.go}</Link>
+              </>
+            )}
+          </li>
+        ))}
+        <li>
+          Run your first assessment {next === -1 && <Badge tone="info">Next</Badge>}
+          {next === -1 && <RunAssessment onDone={onDone} variant="accent" />}
+        </li>
+      </ol>
+    </Card>
+  );
+}
 
 export default function Overview() {
   const [l, reload] = useLatest();
@@ -65,29 +122,25 @@ export default function Overview() {
     return (
       <>
         <PageHeader title="Overview" />
-        <EmptyState
-          title="No assessment yet"
-          hint="Connect a source, sync it, then run your first assessment."
-        >
-          <RunAssessment onDone={reload} />
-        </EmptyState>
+        <GetStarted onDone={reload} />
       </>
     );
-  const { a, ev } = l;
-  const stale = [ev.github, ev.leetcode].some((d) => d && isStale(d.synced_at));
+  const { a } = l;
+  const r = a.result;
   const scored = hasScore(a);
-  const top = priorities(ev).slice(0, 3);
+  const dims = r?.dimensions ?? [];
   return (
     <>
       <PageHeader title="Overview" sub={`Last assessment: ${new Date(a.created_at).toLocaleString()}`} />
-      {stale && (
+      {!r && <LegacyNotice />}
+      {needsAttention(a) && (
         <Banner tone="warn">
-          ! Some provider data is more than a week old. Re-sync for current evidence.
+          ! Some provider data is stale or its last sync failed. Re-sync for current evidence.
         </Banner>
       )}
       <Card className="hero">
         <div>
-          <div className="eyebrow">{scored ? "Demo formula score" : "Readiness evidence"}</div>
+          <div className="eyebrow">{scored ? "Demo formula score" : "Preparation assessment"}</div>
           <div className="big">
             {scored ? (
               <>
@@ -101,7 +154,7 @@ export default function Overview() {
           <p>
             {scored
               ? `Category: ${a.category}. Legacy model of a hand-written formula, not a prediction or placement outcome.`
-              : `No score yet. ${a.reason}`}
+              : `No score. ${a.reason ?? ""}`}
           </p>
         </div>
         <div className="stack">
@@ -110,30 +163,23 @@ export default function Overview() {
         </div>
       </Card>
       <div className="grid">
-        <StatCard
-          label="CGPA"
-          value={ev.cgpa?.value ?? "—"}
-          hint={ev.cgpa ? "User-entered, not verified" : "Missing from profile"}
-        />
-        <StatCard
-          label="Public GitHub repos"
-          value={ev.github?.values.github_public_repo_count ?? "—"}
-          hint={ev.github ? `Observed · synced ${age(ev.github.synced_at)}` : "Not connected"}
-        />
-        <StatCard
-          label="LeetCode solved"
-          value={ev.leetcode?.values.leetcode_solved_all ?? "—"}
-          hint={ev.leetcode ? `Observed · synced ${age(ev.leetcode.synced_at)}` : "Not connected"}
-        />
+        {dims.map((d) => (
+          <StatCard
+            key={d.dimension}
+            label={d.title}
+            value={STATE_LABEL[d.evidence_state]}
+            hint={
+              <>
+                <StatusBadge status={d.evidence_state} /> {d.coverage}
+              </>
+            }
+          />
+        ))}
       </div>
       <Card>
         <h2>Top priorities</h2>
-        {top.length ? (
-          <ol>
-            {top.map((p) => (
-              <li key={p.id}>{p.text}</li>
-            ))}
-          </ol>
+        {r && r.recommendations.length ? (
+          <RecommendationList items={r.recommendations.slice(0, 3)} />
         ) : (
           <p>Nothing in your latest snapshot triggers a suggestion.</p>
         )}

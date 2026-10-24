@@ -32,6 +32,46 @@ export interface SyncRun {
   records_rejected: number | null;
   safe_error_code: string | null;
 }
+export type EvidenceState = "no_evidence" | "stale" | "partial" | "sufficient" | "source_failed";
+export interface DimensionValue {
+  name: string;
+  value: number | string | null;
+  provenance: string;
+  value_state: string;
+  event_at_precision: string | null;
+  collected_at: string | null;
+  synced_at: string | null;
+  sync_run_id: string | null;
+}
+export interface Dimension {
+  dimension: string;
+  title: string;
+  evidence_state: EvidenceState;
+  values: DimensionValue[];
+  rule: { id: string; text: string };
+  coverage: string;
+  caveats: string[];
+  last_sync?: { status: string; error_code: string | null };
+}
+export interface Recommendation {
+  id: string;
+  rule_id: string;
+  priority: number;
+  dimension: string;
+  action: string;
+  reason: string;
+  evidence_refs: { dimension: string; name: string | null; sync_run_id: string | null }[];
+  limitation: string;
+}
+export interface AssessmentResult {
+  assessment_version: string;
+  evidence_version: string;
+  generated_at: string;
+  stale_after_days: number;
+  dimensions: Dimension[];
+  recommendations: Recommendation[];
+  limitations: string;
+}
 export interface Assessment {
   id: string;
   assessment_type: string;
@@ -39,25 +79,26 @@ export interface Assessment {
   category: string | null;
   reason: string | null;
   model_version: string | null;
+  result: AssessmentResult | null; // null for snapshots made before rules-v1
   created_at: string;
 }
-export interface ProviderEvidence {
-  sync_run_id: string;
-  synced_at: string;
-  provenance: string;
-  values: Record<string, number | null>;
-  activity_trend?: {
-    direction: "up" | "flat" | "down" | null;
-    rule: string;
-    as_of: string;
-    provenance: string;
-  };
-}
-export interface Evidence {
-  evidence_version: string;
-  cgpa: { value: number; provenance: string } | null;
-  github: ProviderEvidence | null;
-  leetcode: ProviderEvidence | null;
+export interface Comparison {
+  from: { id: string; created_at: string };
+  to: { id: string; created_at: string };
+  comparable: boolean;
+  disclosures: string[];
+  dimensions: {
+    dimension: string;
+    from_state?: EvidenceState;
+    to_state?: EvidenceState;
+    only_in?: "from" | "to";
+    deltas: {
+      name: string;
+      from: number | string | null;
+      to: number | string | null;
+      delta: number | null;
+    }[];
+  }[];
 }
 
 export const connectProvider = (provider: string, username: string) =>
@@ -84,5 +125,5 @@ export const getDataQuality = () =>
 export const createAssessment = () => request<Assessment>("/api/v1/assessments", { method: "POST" });
 export const listAssessments = (limit = 20) =>
   request<{ items: Assessment[] }>(`/api/v1/assessments?limit=${limit}`);
-export const getEvidence = (id: string) =>
-  request<{ assessment_id: string; evidence: Evidence }>(`/api/v1/assessments/${id}/evidence`);
+export const compareAssessments = (earlier: string, later: string) =>
+  request<Comparison>(`/api/v1/assessments/${earlier}/compare/${later}`);

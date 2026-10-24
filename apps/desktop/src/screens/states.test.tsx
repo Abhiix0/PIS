@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Assessment from "./Assessment";
 import Dashboard from "./Dashboard";
@@ -11,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 // [screen, body of the empty response, empty-state text]
 const SCREENS = [
-  ["Overview", Overview, { items: [] }, /No assessment yet/],
+  ["Overview", Overview, { items: [] }, /Get started/],
   ["Assessment", Assessment, { items: [] }, /No assessment yet/],
   ["Plan", Plan, { items: [] }, /No assessment yet/],
   ["History", History, { items: [] }, /No assessments yet/],
@@ -25,7 +26,11 @@ describe.each(SCREENS)("%s states", (_n, Screen, empty, emptyText) => {
       "fetch",
       vi.fn(() => new Promise(() => {})),
     );
-    render(<Screen />);
+    render(
+      <MemoryRouter>
+        <Screen />
+      </MemoryRouter>,
+    );
     expect(screen.getByRole("status")).toHaveTextContent("Loading");
   });
   it("shows an empty state", async () => {
@@ -33,7 +38,11 @@ describe.each(SCREENS)("%s states", (_n, Screen, empty, emptyText) => {
       "fetch",
       vi.fn(async () => Response.json(empty)),
     );
-    render(<Screen />);
+    render(
+      <MemoryRouter>
+        <Screen />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText(emptyText)).toBeInTheDocument();
   });
   it("shows an error with retry when the server fails", async () => {
@@ -43,7 +52,11 @@ describe.each(SCREENS)("%s states", (_n, Screen, empty, emptyText) => {
         Response.json({ error: { code: "x", message: "Boom", request_id: "r1" } }, { status: 500 }),
       ),
     );
-    render(<Screen />);
+    render(
+      <MemoryRouter>
+        <Screen />
+      </MemoryRouter>,
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent("Boom (ref r1)");
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });

@@ -1,5 +1,6 @@
 import { Card, EmptyState, ErrorState, Loading, PageHeader } from "../components";
-import { DISCLAIMER, priorities } from "../lib/assessment";
+import { DISCLAIMER } from "../lib/assessment";
+import { LegacyNotice, RecommendationList } from "./Dimensions";
 import { useLatest } from "./useLatest";
 
 export default function Plan() {
@@ -13,28 +14,26 @@ export default function Plan() {
         <EmptyState title="No assessment yet" hint="Run one from the Overview to get priorities." />
       </>
     );
-  const ps = priorities(l.ev);
+  const r = l.a.result;
   return (
     <>
       <PageHeader
         title="Development plan"
-        sub={`${DISCLAIMER} These come from fixed rules, not from the ML model.`}
+        sub={`${DISCLAIMER} These come from fixed rules on the server, not from a model.`}
       />
-      {ps.length === 0 ? (
+      {!r && <LegacyNotice />}
+      {r && r.recommendations.length === 0 ? (
         <EmptyState
           title="No priorities from current evidence"
           hint="Nothing in your latest snapshot triggers a suggestion."
         />
       ) : (
-        <Card>
-          <ol>
-            {ps.map((p) => (
-              <li key={p.id}>
-                {p.text} <span className="muted">Evidence: {p.evidence}</span>
-              </li>
-            ))}
-          </ol>
-        </Card>
+        r && (
+          <Card>
+            <RecommendationList items={r.recommendations} />
+            <p className="muted">{r.recommendations[0]?.limitation}</p>
+          </Card>
+        )
       )}
     </>
   );

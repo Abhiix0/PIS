@@ -16,6 +16,9 @@ const STATUS: Record<string, [BadgeProps["tone"], string]> = {
   running: ["info", "… Running"],
   failed: ["danger", "✕ Failed"],
   stale: ["warn", "! Stale"],
+  sufficient: ["ok", "✓ Sufficient"],
+  no_evidence: ["neutral", "– No evidence"],
+  source_failed: ["danger", "✕ Sync failed"],
 };
 export const StatusBadge = ({ status }: { status: string }) => {
   const [tone, text] = STATUS[status] ?? ["neutral", status];

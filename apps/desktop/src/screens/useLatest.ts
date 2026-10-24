@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { getEvidence, listAssessments, type Assessment, type Evidence } from "../api/v1";
+import { listAssessments, type Assessment } from "../api/v1";
 import { friendly } from "./Dashboard";
 
 export type Latest =
-  | { s: "loading" }
-  | { s: "error"; message: string }
-  | { s: "empty" }
-  | { s: "ready"; a: Assessment; ev: Evidence };
+  { s: "loading" } | { s: "error"; message: string } | { s: "empty" } | { s: "ready"; a: Assessment };
 
 // One fetch per mount (and per reload); a response from a superseded load is ignored.
 export function useLatest(): [Latest, () => void] {
@@ -15,11 +12,7 @@ export function useLatest(): [Latest, () => void] {
   useEffect(() => {
     let live = true;
     listAssessments(1)
-      .then(async ({ items }): Promise<Latest> => {
-        if (!items[0]) return { s: "empty" };
-        const { evidence } = await getEvidence(items[0].id);
-        return { s: "ready", a: items[0], ev: evidence };
-      })
+      .then(({ items }): Latest => (items[0] ? { s: "ready", a: items[0] } : { s: "empty" }))
       .catch((e): Latest => ({ s: "error", message: friendly(e) }))
       .then((r) => {
         if (live) setState(r);

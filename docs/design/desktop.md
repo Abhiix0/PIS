@@ -26,3 +26,11 @@ npm run typecheck | lint | format | test | build
 Tokens in `src/styles/tokens.css` (light/dark, spacing, type). Components in `src/components/ui.tsx`:
 Button, Field, Loading, Empty, ErrorState, Stale, Partial. App-level API state: `src/connection.tsx`
 (polls `/health`). Dialog component is not built yet (no screen needs one).
+
+## Server contract (Phase 6.1)
+The client renders the server's rules-v1 result and holds no assessment rules of its own: `Assessment.result.dimensions[]` (state badge, values with provenance and collection time, rule id/text, coverage, caveats), `result.recommendations[]` (rule id and evidence refs) and `GET /assessments/{id}/compare/{other_id}`. Staleness is decided by the server. Snapshots made before rules-v1 have `result: null` and are flagged, not rendered as empty assessments. CGPA appears only as the D4 context card.
+
+First run (Overview, no assessments yet): profile -> connect GitHub -> first sync -> first assessment. Progress is read from the server (profile exists, GitHub connected, a successful sync), so quitting midway resumes at the next undone step with no local state.
+
+Screens show loading, empty, error-with-retry (including request id) and offline (an unreachable API is an error, never old data presented as current). Sample data exists only in `src/api/mock.ts`, loaded when `VITE_MOCK_API=1` in dev; `Phase61.test.tsx` checks that the production bundle contains none of it (when `dist/` exists).
+

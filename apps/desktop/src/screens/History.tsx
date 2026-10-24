@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getEvidence, listAssessments, type Assessment } from "../api/v1";
+import { compareAssessments, listAssessments, type Assessment, type Comparison } from "../api/v1";
 import {
   Badge,
   Banner,
@@ -11,7 +11,6 @@ import {
   PageHeader,
   Table,
 } from "../components";
-import { compare, type Comparison } from "../lib/assessment";
 import { friendly } from "./Dashboard";
 
 export default function History() {
@@ -58,13 +57,11 @@ export default function History() {
   };
   async function run() {
     try {
-      // older snapshot first so deltas read forward in time
-      const sel = pick
+      // older snapshot first so deltas read forward in time; the server decides what is comparable
+      const [x, y] = pick
         .map((id) => items!.find((i) => i.id === id)!)
-        .sort((p, q) => p.created_at.localeCompare(q.created_at));
-      const [x, y] = sel as [Assessment, Assessment];
-      const [ex, ey] = await Promise.all([getEvidence(x.id), getEvidence(y.id)]);
-      setCmp(compare({ a: x, ev: ex.evidence }, { a: y, ev: ey.evidence }));
+        .sort((p, q) => p.created_at.localeCompare(q.created_at)) as [Assessment, Assessment];
+      setCmp(await compareAssessments(x.id, y.id));
     } catch (e) {
       setError(friendly(e));
     }
@@ -99,16 +96,17 @@ export default function History() {
         <Card aria-label="Comparison">
           {!cmp.comparable && (
             <p role="alert" className="err">
-              ! These snapshots cannot be compared. {cmp.notes.join(" ")}
+              ! These snapshots cannot be compared value by value.
             </p>
           )}
-          {cmp.comparable && (
-            <>
-              {cmp.notes.map((t) => (
-                <Banner key={t}>{t}</Banner>
-              ))}
-              {cmp.deltas.length === 0 ? (
-                <p>No observed values in either snapshot.</p>
+          {cmp.disclosures.map((t) => (
+            <Banner key={t}>{t}</Banner>
+          ))}
+          {cmp.dimensions.map((d) => (
+            <div key={d.dimension} className="stack">
+              <h2>{d.dimension}</h2>
+              {d.only_in ? (
+                <p>Present only in the {d.only_in === "from" ? "earlier" : "later"} snapshot.</p>
               ) : (
                 <Table>
                   <thead>
@@ -116,21 +114,23 @@ export default function History() {
                       <th>Item</th>
                       <th>Earlier</th>
                       <th>Later</th>
+                      <th>Change</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {cmp.deltas.map((d) => (
-                      <tr key={d.key}>
-                        <td>{d.key}</td>
-                        <td>{d.from ?? "—"}</td>
-                        <td>{d.to ?? "—"}</td>
+                    {d.deltas.map((x) => (
+                      <tr key={x.name}>
+                        <td>{x.name}</td>
+                        <td>{x.from ?? "—"}</td>
+                        <td>{x.to ?? "—"}</td>
+                        <td>{x.delta ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
               )}
-            </>
-          )}
+            </div>
+          ))}
         </Card>
       )}
     </>
