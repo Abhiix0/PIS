@@ -2,7 +2,7 @@
 
 Phase 1 / Unit 4. Written from source reading plus one DB-free test run made for this record. Branch `main`, working tree clean at start.
 
-**Missing inputs.** The result reports from Units 1-3 were not supplied, and the plan that defined D-01..D-04 and S-01..S-04 was deleted (CLAUDE.md). Nothing from Units 1-3 is assumed. Anything not run in this unit is **Not run** or carries its last recorded status from `audit-report.md`, labelled as such.
+**Missing inputs.** The result reports from Units 1-3 were not supplied, and the plan that defined D-01..D-04 and S-01..S-04 was deleted (CLAUDE.md). Nothing from Units 1-3 is assumed. Anything not run in this unit is **Not run** or carries its last recorded status from `audit-report.md`, labelled as such. The definitions of S-01..S-04 are in §4; §6 holds the 2026-10-24 verification run (Phase 1.1/1.2).
 
 ## 1. Environment and commands
 
@@ -129,3 +129,38 @@ Open decisions (from PRD §19, `docs/product/PIS_PRD.md`; no answers given here)
 Additional questions raised by this record, unanswered:
 
 - Whether D-04 coverage of the operator-role path is sufficient. The history describes `ADMIN_KEY`; the code now uses a JWT role.
+
+## 6. Verification run, 2026-10-24 (roadmap Phase 1.1 and 1.2)
+
+Machine: Windows 11, Docker 29.3.1, cargo 1.99, Node (npm). Compose project `nx_p1` with host ports remapped (db 15433, api 18001) through a throwaway override file; no other project's containers, volumes or the local PostgreSQL on 5432 were touched. Only results observed in this run are listed.
+
+| Check | Result | Evidence |
+|---|---|---|
+| `docker build -t nexgauge-api:p1 .` (runtime image, `INSTALL_DEV=0`) | **Pass** | Runs as uid 999 `app`; `pip list` has no pytest/ruff. |
+| Runtime image, `APP_ENV=staging`, dummy non-placeholder `AUTH_*`, scratch Postgres 15 container, no model | **Pass** | `python -m ingest.migrate` applied 10 migrations; `GET /health/ready` 200 `{"status":"ready"}`; `/health/detailed` `model_version: "none"`; `GET /api/v1/me` 401. |
+| `docker compose -p nx_p1 up --build` (local mode, `SEED_DEMO_DATA=true`) boot chain `features.compute` -> `ml.train` -> `ml.bundle bootstrap` -> `ml.predict` -> uvicorn | **Pass** (after two findings below) | `/health` 200; `/health/ready` 200; `/health/detailed` 200 with model `v20261024150954878787-23a430c1-09041c`, `student_count` 8; `/api/v1/me` 401 with the error envelope. |
+| pytest inside the api container (Python 3.11.17, Postgres 15.19) | **Pass** | 299 passed, 5 skipped (`tests/test_migrate.py` DB tests need `TEST_ADMIN_DATABASE_URL`). |
+| Full pytest on host (Python 3.12, scratch Postgres 15 with `TEST_ADMIN_DATABASE_URL`), Phase 1.1 | **Pass** | 304 passed, coverage 84.92% (floor 79%). |
+| `ruff check .`, `ruff format --check .`, `mypy` (Phase 1.1) | **Pass** | 96 files formatted, 26 files typed. |
+| `tests/test_sync.py::test_unexpected_adapter_crash_still_closes_the_run` x3 | **Pass** 3/3 | Each run 1 passed. |
+| apps/desktop `npm ci`, `npm run build`, `npm test` | **Pass** | Build OK; 8 files, 55 tests passed. |
+| `npx tauri build` | **Pass** | `NexGauge_0.1.0_x64-setup.exe`, 2276194 bytes, SHA-256 `e8632115a144584df234bb8adddff66a36a494f0fc7224daae5cfd465a233d98` (local build; not a release artefact). Matches the pattern in `install-guide.md`. A stale `Placement Intelligence_0.1.0_x64-setup.exe` from 2026-10-22 sits in the same ignored folder. |
+| Packaged app / `tauri dev` against the local API, Origin header actually sent | **Not run** | Needs a person to launch the GUI; recorded in the manual checklist. |
+| Clean-machine install, SmartScreen, upgrade | **Not run** | Owner task. |
+| Remote CI, Terraform, live IdP, real GitHub/LeetCode | **Not run** | Not available or not authorized. |
+
+Verdicts for the suspected items of §4:
+
+| ID | Verdict | Basis |
+|---|---|---|
+| S-01 CORS from webview | **Not run in a webview.** API side mitigated | API now answers allow-listed origins (tests, Phase 1.1). Tauri 2 on Windows is documented to use `http://tauri.localhost`, but the origin was not observed. |
+| S-02 Production image without models | **Fixed and verified** | Staging-mode container above starts and reports ready with no bundle. |
+| S-03 Live OIDC loop | **Not run** | No IdP configured. |
+| S-04 `test_sync` flakiness | **Not reproduced** | 3/3 targeted runs and two full-suite runs (3.11 container, 3.12 host) passed. Absence of a failure is not proof. |
+
+Findings from this run:
+
+| ID | Severity | Finding | Status |
+|---|---|---|---|
+| N-06 | Low | The first `docker compose up` failed: this machine's `.env` has `SEED_DEMO_DATA=false`, so `features.compute` ran on an empty `students` table and crashed in `MinMaxScaler` ("0 sample(s)"). Compose reads `.env`. | Environmental. Re-run with `SEED_DEMO_DATA=true` in the shell. The crash message is unfriendly; not changed. |
+| N-07 | Medium | After Phase 1.1 made the image non-root, `ml.train` failed in compose with `PermissionError: [Errno 1] Operation not permitted: 'models/staging/scaler.pkl'` (chmod by uid 999 on a Windows bind mount). | Fixed: `docker-compose.yml` sets `user: root` for the local api service only. The runtime image still runs as non-root. |

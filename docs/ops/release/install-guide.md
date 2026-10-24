@@ -6,7 +6,7 @@ NexGauge (Personal Career Intelligence System) shows a readiness **proxy score**
 Windows 10 (1809+) or Windows 11, 64-bit, internet access. You do **not** need Python, Node.js, Docker or PostgreSQL. The installer downloads Microsoft WebView2 if it is missing.
 
 ## Install
-1. Download `NexGauge_<version>_x64-setup.exe` (filename pattern unconfirmed until the first build is checked) and `SHA256SUMS.txt` from the release page.
+1. Download `NexGauge_<version>_x64-setup.exe` (a local `npx tauri build` on 2026-10-24 produced `NexGauge_0.1.0_x64-setup.exe`; clean install not tested) and `SHA256SUMS.txt` from the release page.
 2. Verify: `Get-FileHash .\<installer>.exe -Algorithm SHA256` must equal the line in `SHA256SUMS.txt`. Do not run a file that differs.
 3. Run the installer. It installs for your user only (no administrator rights).
 4. **Unsigned builds:** until a code-signing certificate is configured (`release.json` says `"signing": "unsigned"`), Windows SmartScreen shows "Windows protected your PC". Check the checksum first, then choose *More info -> Run anyway*. Signed builds show the publisher name instead.
