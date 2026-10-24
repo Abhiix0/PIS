@@ -33,4 +33,3 @@ The client renders the server's rules-v1 result and holds no assessment rules of
 First run (Overview, no assessments yet): profile -> connect GitHub -> first sync -> first assessment. Progress is read from the server (profile exists, GitHub connected, a successful sync), so quitting midway resumes at the next undone step with no local state.
 
 Screens show loading, empty, error-with-retry (including request id) and offline (an unreachable API is an error, never old data presented as current). Sample data exists only in `src/api/mock.ts`, loaded when `VITE_MOCK_API=1` in dev; `Phase61.test.tsx` checks that the production bundle contains none of it (when `dist/` exists).
-
