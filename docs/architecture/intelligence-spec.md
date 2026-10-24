@@ -25,7 +25,7 @@ Consequence: `../ml/target.md` §6 and ADR 0005 record the same approvals. Nothi
 
 ## 1. Dimensions (v1 set approved; contents proposed)
 
-Current behaviour: real accounts get `assessment_type = 'insufficient_evidence'` and no score (`app/routers/v1.py` `create_assessment`, `NO_SCORE_REASON`). `_build_evidence` (`evidence-v1`) already assembles per-provider evidence blocks. The dimensions below organise that evidence; none is a new score.
+Current behaviour: real accounts get `assessment_type = 'insufficient_evidence'` and no score (`app/routers/v1.py` `create_assessment`, `NO_SCORE_REASON`). `_build_evidence` (`evidence-v2`, since Phase 3.1) already assembles per-provider evidence blocks. The dimensions below organise that evidence; none is a new score.
 
 Wording rule (from `../ml/target.md` §3): "preparation assessment" / "readiness proxy score"; never "placement probability" or any hiring claim.
 
@@ -82,7 +82,7 @@ Enums (from `domain-model.md` §3): `provenance` = `observed | user_entered | de
 
 Inconsistencies found (for the owner, not resolved here):
 - `../ml/target.md` §3 lists provenance classes as `observed | user_entered | aggregate | inferred | synthetic`; `domain-model.md` §3 lists `derived` instead of `aggregate` and carries aggregate-ness in `granularity`. This spec follows `domain-model.md`.
-- `_build_evidence` does not select `value_state`, and sets each block's `provenance` from `rows[0]` (an arbitrary row of the latest run, no ORDER BY in the query as read). Mixed provenance within a block is therefore not guaranteed to show its weakest class, contrary to the data-dictionary rule "weakest provenance of its input rows" (stated there for legacy features). Unverified in a test.
+- Resolved in Phase 3.1 (`evidence-v2`): `_build_evidence` selects `value_state`, orders rows deterministically and sets the block provenance to the weakest among its rows (tested).
 - The trend `as_of` is `max(days)` (latest calendar day returned), not the sync time.
 
 ## 3. Output contract per dimension

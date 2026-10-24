@@ -309,3 +309,121 @@ def test_expired_and_revoked_tokens_are_401_with_the_envelope():
     assert (
         client.get(f"{V1}/me", headers=live).status_code == 401
     )  # logout revokes tokens issued before it
+
+
+# ── Phase 3.1: evidence contract (evidence-v2) ────────────────────────
+def _evidence(u):
+    aid = u.post("/assessments").json()["id"]
+    return u.get(f"/assessments/{aid}/evidence").json()["evidence"]
+
+
+def _leetcode_user(monkeypatch, parts):
+    from unittest.mock import patch
+
+    from ingest.provider import Observation
+
+    monkeypatch.setattr(config, "LEETCODE_INTEGRATION_ENABLED", True)
+    u = U()
+    u.put("/me/profile", json={"display_name": "L"})
+    assert u.put("/integrations/leetcode", json={"username": "someone"}).status_code == 200
+    obs = [Observation("leetcode", f"leetcode_solved_{d}", n) for d, n in parts]
+    with patch("ingest.leetcode_api.fetch_leetcode_observations", return_value=(obs, False)):
+        assert u.post("/integrations/leetcode/sync").status_code == 202
+    return u
+
+
+def test_evidence_v2_derives_leetcode_total_only_from_all_three(monkeypatch):
+    ev = _evidence(_leetcode_user(monkeypatch, (("easy", 5), ("medium", 0), ("hard", 1))))
+    lc = ev["leetcode"]
+    assert ev["evidence_version"] == "evidence-v2" and lc["values"]["leetcode_solved_all"] == 6
+    assert lc["derived"] == ["leetcode_solved_all"] and lc["value_states"]["leetcode_solved_medium"]
+    ev = _evidence(_leetcode_user(monkeypatch, (("easy", 5), ("hard", 1))))  # missing is not zero
+    assert "leetcode_solved_all" not in ev["leetcode"]["values"] and ev["leetcode"]["derived"] == []
+
+
+class _Cur:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def execute(self, *a):
+        pass
+
+    def fetchall(self):
+        return self.rows
+
+
+def test_block_provenance_is_the_weakest_and_independent_of_row_order():
+    from datetime import UTC, datetime
+
+    from app.routers.v1 import _build_evidence
+
+    t = datetime(2024, 1, 1, tzinfo=UTC)
+    a = ("leetcode_solved_easy", 1.0, "observed", "r1", t, None, "present")
+    b = ("leetcode_solved_hard", 0.0, "inferred", "r1", t, None, "measured_zero")
+    for rows in ([a, b], [b, a]):
+        blk = _build_evidence(_Cur(rows), "p", None)["leetcode"]
+        assert blk["provenance"] == "inferred" and blk["value_states"]["leetcode_solved_hard"] == (
+            "measured_zero"
+        )
+
+
+def test_missing_calendar_day_is_not_counted_as_zero():
+    from datetime import UTC, datetime
+
+    from app.routers.v1 import _build_evidence
+
+    t = datetime(2024, 1, 1, tzinfo=UTC)
+    rows = [("github_contribution_day", None, "observed", "r1", t, "2024-01-01", "not_collected")]
+    blk = _build_evidence(_Cur(rows), "p", None)["github"]
+    assert "activity_trend" not in blk and blk["values"] == {}
+
+
+def test_same_data_gives_identical_evidence(user):
+    with with_adapter(gh(("a", 3), ("b", 4))):
+        user.post("/integrations/github/sync")
+    first, second = _evidence(user), _evidence(user)
+    assert first == second
+
+
+def test_profile_validation_bounds(user):
+    for bad in (
+        {"graduation_year": 1999},
+        {"graduation_year": 2101},
+        {"cgpa": -0.1},
+        {"cgpa": 10.1},
+    ):
+        error_of(
+            user.put("/me/profile", json={"display_name": "T", **bad}), 422, "validation_error"
+        )
+    ok = user.put("/me/profile", json={"display_name": "T", "cgpa": 10, "graduation_year": 2026})
+    assert ok.status_code == 200
+
+
+def test_first_login_creates_the_user_row_once():
+    u = U()
+    sub = "first-" + uuid.uuid4().hex
+    h = bearer(make_token(sub))
+    q = "SELECT count(*) FROM users WHERE auth_subject = %s"
+    assert _count(q, sub) == 0
+    for _ in range(2):
+        assert client.get(f"{V1}/me", headers=h).status_code == 200
+    assert _count(q, sub) == 1 and u.get("/me").json()["profile"] is None
+
+
+def test_every_route_with_an_id_hides_other_users_records(user):
+    with with_adapter(gh(("a", 1))):
+        rid = user.post("/integrations/github/sync").json()["id"]
+    ids = {"{assessment_id}": user.post("/assessments").json()["id"], "{run_id}": rid}
+    other = U()
+    other.put("/me/profile", json={"display_name": "O"})
+    seen = 0
+    for r in app.routes:
+        if not r.path.startswith(V1) or not any(k in r.path for k in ids):
+            continue
+        path = r.path[len(V1) :]
+        for k, v in ids.items():
+            path = path.replace(k, v)
+        for m in r.methods - {"HEAD"}:
+            error_of(getattr(other, m.lower())(path), 404, "not_found")
+            seen += 1
+    assert seen >= 3  # assessment, evidence, sync run

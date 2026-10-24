@@ -19,7 +19,10 @@ from services import privacy, sync
 router = APIRouter(prefix="/api/v1")
 session_router = APIRouter(tags=["Session"])  # unprefixed: the desktop client calls /auth/logout
 Provider = Literal["github", "leetcode"]
-EVIDENCE_VERSION = "evidence-v1"
+EVIDENCE_VERSION = "evidence-v2"
+# Strongest to weakest; a block shows the weakest provenance among its rows (docs/data/data-dictionary.md).
+_PROVENANCE_ORDER = ("observed", "user_entered", "derived", "inferred", "synthetic")
+_LEETCODE_PARTS = ("leetcode_solved_easy", "leetcode_solved_medium", "leetcode_solved_hard")
 NO_SCORE_REASON = (
     "No readiness proxy score for real accounts: the model's inputs (per-problem solve history, "
     "daily commit rate) cannot be derived from provider data without inventing values. "
@@ -198,11 +201,12 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
         cur.execute(
             """
             SELECT o.observation_type, o.value_num::float, o.provenance::text, o.sync_run_id::text, r.completed_at,
-                   o.source_object_id
+                   o.source_object_id, o.value_state::text
             FROM source_observations o JOIN sync_runs r ON r.id = o.sync_run_id
             WHERE o.profile_id = %s AND o.provider = %s AND o.sync_run_id = (
                 SELECT sync_run_id FROM source_observations WHERE profile_id = %s AND provider = %s
                 ORDER BY collected_at DESC LIMIT 1)
+            ORDER BY o.observation_type, o.source_object_id NULLS FIRST
         """,
             (profile_id, provider, profile_id, provider),
         )
@@ -211,26 +215,47 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
             ev[provider] = None
             continue
         values: dict[str, Any] = {}
+        states: dict[str, str] = {}
         days: dict[date, int] = {}
-        for typ, num, _, _, _, obj_id in rows:
+        for typ, num, _, _, _, obj_id, state in rows:
             if (
                 typ == "github_contribution_day"
             ):  # calendar days feed the trend rule, not the flat values
-                days[date.fromisoformat(obj_id)] = int(num or 0)
+                if num is not None:  # a missing day is unknown, never 0
+                    days[date.fromisoformat(obj_id)] = int(num)
             elif (
                 typ == "github_repo_commit_count"
             ):  # per-repo rows: report the sum and how many repos fed it
-                values["commits_in_sampled_repos"] = values.get("commits_in_sampled_repos", 0) + (
-                    num or 0
-                )
-                values["repos_sampled"] = values.get("repos_sampled", 0) + 1
+                if num is not None:
+                    values["commits_in_sampled_repos"] = values.get(
+                        "commits_in_sampled_repos", 0
+                    ) + (num)
+                    values["repos_sampled"] = values.get("repos_sampled", 0) + 1
+                    # measured_zero only if every sampled repo reported 0
+                    prev = states.get("commits_in_sampled_repos", "measured_zero")
+                    states["commits_in_sampled_repos"] = (
+                        "measured_zero" if prev == state == "measured_zero" else "present"
+                    )
             else:
                 values[typ] = num
+                states[typ] = state
+        provenance = max((r[2] for r in rows), key=_PROVENANCE_ORDER.index)
+        derived = []
+        if all(values.get(k) is not None for k in _LEETCODE_PARTS):
+            values["leetcode_solved_all"] = sum(values[k] for k in _LEETCODE_PARTS)
+            states["leetcode_solved_all"] = (
+                "present" if values["leetcode_solved_all"] else "measured_zero"
+            )
+            derived.append(
+                "leetcode_solved_all"
+            )  # a sum of the three present counts; missing is never 0
         ev[provider] = block = {
             "sync_run_id": rows[0][3],
             "synced_at": rows[0][4].isoformat(),
-            "provenance": rows[0][2],
+            "provenance": provenance,
             "values": values,
+            "value_states": states,
+            "derived": derived,
         }
         if (
             days
@@ -244,7 +269,7 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
                 "rule": "active weeks, last 4 vs previous 8",
                 "as_of": f["as_of"],
                 "features_version": FEATURES_VERSION,
-                "provenance": rows[0][2],
+                "provenance": provenance,
             }
     return ev
 

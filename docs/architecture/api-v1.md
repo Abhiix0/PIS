@@ -24,7 +24,7 @@ Liveness/readiness stay at `/health` and `/health/detailed` (unauthenticated, un
 - **Idempotency:** `PUT` resources are idempotent. Sync: in-flight run → 409, inside cooldown → 429, so a retried POST never starts a second run. `POST /assessments` is not idempotent (each call is a new snapshot). Data requests return the open request.
 
 ## Assessments for real accounts
-Always `assessment_type = insufficient_evidence`, no score. The model's features need per-problem solve history and a daily commit rate that provider data cannot supply without inventing values (see `docs/data/data-dictionary.md`). The snapshot (`evidence-v1`) holds CGPA (`user_entered`) and the latest run's observations per provider (`observed`, with `sync_run_id`). A real-user ML score needs a decision on a validated feature set first (open).
+Always `assessment_type = insufficient_evidence`, no score. The model's features need per-problem solve history and a daily commit rate that provider data cannot supply without inventing values (see `docs/data/data-dictionary.md`). The snapshot (`evidence-v2`; older `evidence-v1` snapshots stay readable) holds CGPA (`user_entered`) and the latest run's observations per provider with `sync_run_id`, the weakest provenance among the rows, per-value `value_states`, and a `derived` list (e.g. `leetcode_solved_all`). A real-user ML score needs a decision on a validated feature set first (open).
 
 ## Not built (no client needs them yet)
 Recommendations and progress state, assessment comparison, settings.
