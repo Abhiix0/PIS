@@ -68,8 +68,8 @@ def _check(resp: requests.Response, allow=(200,)) -> None:
     s = resp.status_code
     if s in allow:
         return
-    retry = resp.headers.get("Retry-After")
-    retry = int(retry) if isinstance(retry, str) and retry.isdigit() else None
+    header = resp.headers.get("Retry-After")
+    retry = int(header) if isinstance(header, str) and header.isdigit() else None
     if s == 404:
         raise ProviderError("not_found")
     if s == 429 or (

@@ -26,3 +26,10 @@ Environment: no live Postgres or Docker, no Rust/Tauri build, no browser. Only D
 
 ## Release blockers
 Exit gate not met: backup restore, rollback, failed-sync recovery demos and performance baseline are unmeasured.
+
+## Dependency and secret audit (Phase 9.2, 2026-10-24)
+- `pip-audit -r requirements.txt` (before): 41 advisories in `fastapi`/`starlette` 0.37.2 (14), PyJWT 2.8.0, requests 2.32.2, python-dotenv 1.0.1, scikit-learn 1.4.2. **Fixed** (direct, low-risk, 349 backend tests pass): PyJWT 2.15.1 (token verification library), requests 2.34.2, python-dotenv 1.2.4; one mypy typing fix in `ingest/github_api.py`. `pip-audit` was installed into the local venv only.
+- **Open, owner decision:** `starlette` 0.37.2 (14 advisories; severities not read) is pinned by `fastapi==0.111.0`. Moving to a current FastAPI/Starlette was tried and reverted: newer FastAPI wraps routers in `_IncludedRouter`, which breaks route enumeration in `tests/test_route_coverage.py`, `tests/test_api_v1.py` and the API-surface drift test, so it needs a reviewed refactor, not a version bump. Mitigations in place: the app serves no static files and accepts no form or multipart bodies (JSON only, 64 KiB cap). Treat as a blocker for a public release, not for a small private pilot.
+- `scikit-learn` 1.4.2 (PYSEC-2024-110, a text-vectorizer issue; the app uses no text vectorizer). Not upgraded: model bundles are pickled with 1.4.2 and would need retraining.
+- `npm audit --omit=dev` (apps/desktop): 0 vulnerabilities. `cargo audit`: not installed, not run.
+- Secret scan, tracked files and full git history (106 commits; AWS, GitHub, OpenAI-style keys, private-key headers; no `.env`, `.pfx`, `.pem` or key file ever added): no matches. Regex scan only; `gitleaks` is not installed.

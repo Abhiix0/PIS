@@ -164,3 +164,31 @@ Findings from this run:
 |---|---|---|---|
 | N-06 | Low | The first `docker compose up` failed: this machine's `.env` has `SEED_DEMO_DATA=false`, so `features.compute` ran on an empty `students` table and crashed in `MinMaxScaler` ("0 sample(s)"). Compose reads `.env`. | Environmental. Re-run with `SEED_DEMO_DATA=true` in the shell. The crash message is unfriendly; not changed. |
 | N-07 | Medium | After Phase 1.1 made the image non-root, `ml.train` failed in compose with `PermissionError: [Errno 1] Operation not permitted: 'models/staging/scaler.pkl'` (chmod by uid 999 on a Windows bind mount). | Fixed: `docker-compose.yml` sets `user: root` for the local api service only. The runtime image still runs as non-root. |
+
+## 7. Acceptance record, roadmap phases 1-9 (final, 2026-10-24)
+Pass = run and observed here. Not run = could not be run here; the reason is the blocker. Nothing was pushed, released or deployed.
+
+| Phase | Check | Result | Evidence |
+|---|---|---|---|
+| 1.1 | Staging-mode startup and readiness without a model; CORS allow-list; non-root image | **Pass** | Container run, 200 on `/health/ready`; tests in `tests/test_ops.py`, `tests/test_config.py` |
+| 1.1 | Webview actually sends the allow-listed Origin | **Not run** | Needs a person to launch the packaged app |
+| 1.2 | Docker compose boot chain, 3.11 container tests (299 passed, 5 skipped), desktop build/tests, `tauri build` installer | **Pass** | §6 |
+| 1.2 | Packaged app against the API; remote CI | **Not run** | Owner / GitHub |
+| 2 | Owner decisions recorded; docs reconciled | **Pass** (IdP vendor, region, publisher OPEN) | commit `2b155e7` |
+| 3.1 | evidence-v2 contract, isolation/lifecycle/operator tests, secret scan | **Pass** | 316 passed at that commit |
+| 3.2 | Live IdP, token refresh, logout, role check, real GitHub sync | **Not run** | Needs the owner's IdP tenant and GitHub token |
+| 4 | Deterministic rules-v1 assessment (no score, no composite), migration 009 on empty and previous-head databases | **Pass** | `tests/test_assessment.py`, migration tests |
+| 5 | Recommendations and comparison | **Pass** | `tests/test_recommendations.py`, API tests |
+| 6.1 | Desktop wired to the server contract; first-run checklist | **Pass** (mock/unit level) | 97 vitest tests; no live run |
+| 6.2 | Accessibility, contrast, narrow windows | **Pass** (automated and Playwright layout check) | Phase62 tests; screen-reader and real DPI **Not run** |
+| 7.1 | Terraform validate, release dry-run, local restore rehearsal, logging tests | **Pass** (local only) | runbook §12 |
+| 7.2 | Free-host comparison | **Done as research** | `docs/ops/free-hosting.md` |
+| 7.2 | Deployment, HTTPS readiness, rollback, restore drill on a host | **Not run** | Needs the owner's host accounts; $0 constraint |
+| 8.1 | Promotion check, quarantine tests, model card | **Pass**; committed baseline **not reproduced** (data differs) | `docs/ml/model-lifecycle.md` |
+| 8.2 | Forecast on consented data | **Not run** | No consented data, no approved consent text |
+| 0 | Publisher string, icon | **Not run** | Owner supplies both; old icon and `PIS Project` publisher retained |
+| 9.1 | CSP without blanket https:, release workflow, user docs | **Pass**; workflow **Not run** | 97 vitest tests, `tauri build --config` accepted |
+| 9.2 | Dependency audit | **Partly**: PyJWT/requests/dotenv fixed; starlette (14 advisories) **open** | `docs/security/hardening.md` |
+| 9.2 | Secret scan incl. history | **Pass** (regex only) | hardening.md |
+| 9.2 | Pilot kit | **Done** (draft) | `docs/ops/release/pilot-plan.md` |
+| 9 | Clean-machine matrix, upgrade test, SmartScreen | **Not run** | Owner |
