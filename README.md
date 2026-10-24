@@ -1,6 +1,11 @@
 # NexGauge
 
-NexGauge, a **Personal Career Intelligence System**, shows a student a **placement-readiness proxy**, built from public coding (LeetCode) and GitHub activity plus CGPA. It is **not** a prediction of hiring or placement: no outcome labels exist, and the demo model learns a hand-written scoring formula (see [limitations](#limitations)).
+NexGauge, a **Personal Career Intelligence System**, gives a student a **preparation assessment**: per-area evidence states (with source, time, rule and caveats) and traceable suggestions, built from public GitHub activity (LeetCode is disabled by default). CGPA is optional self-reported context. There is **no score** for real accounts and **no prediction of hiring or placement**: no outcome labels exist (see [limitations](#limitations)).
+
+## For end users (no Python, Node or Docker)
+1. Download `NexGauge_<version>_x64-setup.exe` and `SHA256SUMS.txt` from the release page and follow [docs/ops/release/install-guide.md](docs/ops/release/install-guide.md) (the installer is unsigned, so Windows SmartScreen will warn).
+2. Sign in, create your profile, connect your **public** GitHub username, run a sync, then run your first assessment.
+3. What it measures and cannot establish, data handling and deletion are in the install guide. Nothing is published yet: no release exists.
 
 Stack: PostgreSQL 15 (SQL feature engineering) -> FastAPI (`app/`) -> desktop client (`apps/desktop/`, Tauri + React). Python, scikit-learn RandomForest, `psycopg2`.
 

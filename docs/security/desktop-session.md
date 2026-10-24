@@ -20,3 +20,6 @@ Limits / open
 - CSP `connect-src` allows `https:` and `localhost:8000`; an http IdP on another local port needs a CSP edit for dev.
 - Concrete IdP not chosen (PRD §19); logout does not do IdP end-session (browser SSO cookie may remain).
 - No in-app test against a real IdP has been run.
+
+## Upgrade behavior (Phase 9.1)
+The app identifier (`app.pis.desktop`) and the credential-store service name (`SERVICE` in `src-tauri/src`, also `app.pis.desktop`, account `refresh-token`) are unchanged since the first installer (git history), so an existing sign-in should survive an upgrade. **Unverified:** no upgrade was run; how the NSIS installer behaves over an existing install is untested.

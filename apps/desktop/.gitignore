@@ -5,3 +5,4 @@ src-tauri/gen
 .env
 .env.local
 src-tauri/*.pfx
+src-tauri/tauri.csp.conf.json

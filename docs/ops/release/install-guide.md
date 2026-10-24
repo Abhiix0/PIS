@@ -1,6 +1,6 @@
 # Installing, updating and removing NexGauge (Windows)
 
-NexGauge (Personal Career Intelligence System) shows a readiness **proxy score** from your coding and GitHub activity. It does not predict hiring or placement outcomes.
+NexGauge (Personal Career Intelligence System) gives a **preparation assessment** from your public GitHub activity: evidence states per area, with sources, dates and caveats, plus suggestions from fixed rules. It has no score for real accounts and does not predict hiring or placement outcomes.
 
 ## Requirements
 Windows 10 (1809+) or Windows 11, 64-bit, internet access. You do **not** need Python, Node.js, Docker or PostgreSQL. The installer downloads Microsoft WebView2 if it is missing.
@@ -34,3 +34,22 @@ Installs created by earlier "Placement Intelligence" builds may appear as a sepa
 - Builds are unsigned until a certificate is provisioned; the uninstaller is not separately signed.
 - Icon is a placeholder.
 - Clean-machine results: see `clean-machine-matrix.md` (not yet run).
+
+## What NexGauge measures, and what it cannot establish
+- Measures (public data only): GitHub contribution calendar (12 weeks), public repository count and commits in your newest 10 repositories. LeetCode counts only if the operator enables it. CGPA is what you type and is context only.
+- Cannot establish: skill, code quality, effort, private work, other platforms, or any hiring or placement outcome. Each area states its coverage and caveats in the app.
+- The rules and the 7-day freshness window are proposed and have not been validated.
+
+## Your data
+Full detail: `docs/data/privacy-and-retention.md`. You connect a public username only (no token or password is stored by NexGauge). **Privacy -> Export** downloads everything stored about you; **Delete my data** permanently erases it and locks the account. Research use is a separate opt-in and is off by default.
+
+## Sign-in help
+- The browser tab says it cannot connect, or nothing happens: allow `127.0.0.1` in your firewall and try again.
+- You are signed out after an update: sign in again; no data is lost.
+- "Cannot reach the server": the free-tier host may be asleep; wait a minute and retry.
+
+## Known limitations (0.1.0)
+- Unsigned installer: SmartScreen warns; verify the checksum first.
+- The app icon is still the old "P" icon.
+- Rate limiting is per server process (fine for a pilot, not for scale).
+- Install, upgrade and uninstall have **not** been tested on a clean machine yet (see `clean-machine-matrix.md`).

@@ -33,7 +33,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: npx tauri build
+      - name: Webview CSP for this API and IdP only (no blanket https:)
+        run: node scripts/csp.mjs
+      - run: npx tauri build --config src-tauri/tauri.csp.conf.json
       - name: Authenticode sign (only if a certificate secret is configured)
         shell: pwsh
         env:
