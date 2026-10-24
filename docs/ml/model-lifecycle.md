@@ -22,3 +22,11 @@ row per student per hour, so intermediate assessments within the hour are not re
 
 **Scaling**: the scaler is fitted by `features.compute` on the full table and bundled with the models (RF does not need it;
 removing it is a separate retraining change). Limitations: scaler fit on all rows before the train/test split (see the model-lifecycle limitations).
+
+## Model card: legacy readiness bundle (Phase 8.1, 2026-10-24)
+- **What it is:** a RandomForest regressor and classifier (`models/bundles/<version>/`) that re-learn the weighted formula in `ml/labels.py` plus fixed-seed Gaussian noise (sigma 5) from the five legacy features.
+- **Trained on:** the 8 synthetic demo students in `sql/seed.sql` (`provenance = synthetic`). Labels are constructed, not observed outcomes.
+- **Validation:** none beyond a pipeline smoke test. It is not validated and cannot be: there is no outcome to validate against. `ml/experiment.py` only measures how well models re-learn the formula.
+- **Allowed use:** local demo path and operator experiments. **Not** used for real users: `POST /api/v1/assessments` never calls a model and stores `readiness_score = NULL` (checked by `tests/test_quarantine.py`; no `app/` or `services/` module imports `ml.predict`). The desktop labels any legacy score as "Demo formula score" / "Legacy demo score", and real accounts never receive one.
+- **Not claimed:** any prediction of hiring or placement. It outputs a readiness proxy of a hand-written formula.
+- **Reproducibility check (2026-10-24):** `python -m ml.experiment` was run on a scratch copy of the current `features/features_raw.csv`. The dataset differs from the committed `experiments/baseline-synthetic-a7d069146a57.json` (8 rows, sha256 `811671dbcd64...` versus 9 rows, `a7d069146a57...`), so the committed metrics were **not** reproduced and the mismatch is unexplained beyond the data difference (seed and label-noise settings match). The committed report was not changed.

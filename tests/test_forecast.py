@@ -1,5 +1,7 @@
 """Forecast experiment: leakage, split disjointness, test-once. Fixtures are generated in-test (no real data)."""
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -101,3 +103,31 @@ def test_failure_analysis_and_cli(tmp_path, capsys):
     )
     assert fr.main(["--data", str(csv), "--out", str(tmp_path)]) == 0
     assert list(tmp_path.glob("forecast-*.json"))
+
+
+def _report(skill, ci, opened=True):
+    m = {"models": {"poisson": {"skill_vs_persistence": skill, "skill_ci95_user_bootstrap": ci}}}
+    return {"metrics": {"val": m, **({"test": m} if opened else {})}}
+
+
+def test_promotion_check_pass_fail_and_inconclusive():
+    assert fr.promotion_check(_report(0.12, [0.03, 0.2]))["status"] == "pass"
+    assert (
+        fr.promotion_check(_report(0.10, [0.01, 0.2]))["status"] == "pass"
+    )  # boundary is inclusive
+    assert fr.promotion_check(_report(0.08, [0.01, 0.2]))["status"] == "fail"  # skill too small
+    assert fr.promotion_check(_report(0.12, [-0.01, 0.2]))["status"] == "fail"  # CI includes 0
+    assert (
+        fr.promotion_check(_report(0.12, [0.0, 0.2]))["status"] == "fail"
+    )  # lower bound must be > 0
+    # a strong validation result never counts: the test set must have been opened
+    assert fr.promotion_check(_report(0.5, [0.4, 0.6], opened=False))["status"] == "inconclusive"
+    assert fr.promotion_check({})["status"] == "inconclusive"
+    assert fr.promotion_check(_report(None, None))["status"] == "inconclusive"
+
+
+def test_reports_carry_the_check_and_the_cli_applies_it(tmp_path, capsys):
+    rep = tmp_path / "r.json"
+    rep.write_text(json.dumps(_report(0.2, [0.1, 0.3])))
+    assert fr.main(["--check", str(rep)]) == 0
+    assert '"status": "pass"' in capsys.readouterr().out

@@ -31,7 +31,7 @@ Replaces the earlier CI-only gate. On the opened user-disjoint test set (`docs/m
 Otherwise ship rules only. No tree or other complex model unless the existing `tree_gate` (`ml/forecast/run.py`) passes.
 - **Pass**: propose, do not implement, a bundle promotion via `ml/bundle.py` (candidate -> approve -> activate) with smoke test and rollback; list changed product copy.
 - **Fail or inconclusive**: ship rules only; keep `ml/forecast/` code.
-- `ml/forecast/run.py` reports `skill_vs_persistence` and `skill_ci95_user_bootstrap` but does not yet evaluate the 0.10 threshold; apply it by hand to that JSON until a check is added.
+- `ml/forecast/run.py` evaluates this gate (`promotion_check`, added 2026-10-24) and writes `promotion_check` into every report: `pass`, `fail`, or `inconclusive` when the test set was not opened or skill/CI is not computable. `python -m ml.forecast.run --check <report.json>` re-applies it to a saved report. Unit-tested; never run on real data.
 
 ## Outcome (2026-10-19): inconclusive — rules only
 `ml/forecast/run.py` has not been run on real data; no research export exists, and synthetic data is not substituted. There is no CI, so the gate is not passed. Result: no forecast model ships; product stays rule-based and provenance-labelled. This is a missing result, not evidence that forecasting fails. Re-run the gate when a consented export exists.

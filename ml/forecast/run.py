@@ -215,6 +215,34 @@ def evaluate(o: pd.DataFrame, preds: dict[str, np.ndarray], rng) -> dict:
     return out
 
 
+SKILL_MIN = 0.10  # ADR 0005, owner decision 2026-10-22, pre-registered before any result exists
+PROMOTION_MODEL = "poisson"  # the only candidate model; baselines are never promoted
+
+
+def promotion_check(report: dict) -> dict:
+    """ADR 0005 gate on the opened test set: skill >= SKILL_MIN and the lower bound of the user-level 95%
+    bootstrap CI of skill > 0. Without an opened test set (or without a usable skill/CI) it is inconclusive,
+    never a pass. A pass only permits proposing a bundle promotion via ml/bundle.py."""
+    rule = f"skill >= {SKILL_MIN} and 95% user-bootstrap CI lower bound of skill > 0, on the opened test set"
+    test = (report.get("metrics") or {}).get("test")
+    m = ((test or {}).get("models") or {}).get(PROMOTION_MODEL)
+    if not m:
+        return {
+            "status": "inconclusive",
+            "rule": rule,
+            "reason": "test set not opened or not evaluated",
+        }
+    skill, ci = m.get("skill_vs_persistence"), m.get("skill_ci95_user_bootstrap")
+    if skill is None or not ci:
+        return {
+            "status": "inconclusive",
+            "rule": rule,
+            "reason": "skill or its CI is not computable",
+        }
+    ok = skill >= SKILL_MIN and ci[0] > 0
+    return {"status": "pass" if ok else "fail", "rule": rule, "skill": skill, "ci95_lower": ci[0]}
+
+
 def failure_analysis(o: pd.DataFrame, pred: np.ndarray) -> dict:
     """Worst 5% absolute errors per slice, plus bulk/bot flag rates (heuristics) among them vs overall."""
     if o.empty:
@@ -293,6 +321,7 @@ def run(data_path: Path, open_test: bool = False, out_dir: Path | None = None) -
             body["tree_model"] = (
                 "not run (no tree model unless the gate passes on validation; none implemented)"
             )
+    body["promotion_check"] = promotion_check(body)
     body["report_sha256"] = hashlib.sha256(
         json.dumps(body, sort_keys=True, default=str).encode()
     ).hexdigest()
@@ -304,10 +333,18 @@ def run(data_path: Path, open_test: bool = False, out_dir: Path | None = None) -
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--data", required=True, type=Path)
+    ap.add_argument("--data", type=Path)
     ap.add_argument("--out", default="experiments", type=Path)
     ap.add_argument("--open-test", action="store_true")
+    ap.add_argument(
+        "--check", type=Path, help="apply the promotion gate to a saved report and exit"
+    )
     a = ap.parse_args(argv)
+    if a.check:
+        print(json.dumps(promotion_check(json.loads(a.check.read_text())), indent=2))
+        return 0
+    if not a.data:
+        ap.error("--data is required unless --check is given")
     rep = run(a.data, a.open_test, a.out)
     a.out.mkdir(exist_ok=True)
     path = a.out / f"forecast-{rep['dataset']['sha256'][:12]}.json"
