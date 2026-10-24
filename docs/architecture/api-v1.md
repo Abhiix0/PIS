@@ -24,7 +24,11 @@ Liveness/readiness stay at `/health` and `/health/detailed` (unauthenticated, un
 - **Idempotency:** `PUT` resources are idempotent. Sync: in-flight run → 409, inside cooldown → 429, so a retried POST never starts a second run. `POST /assessments` is not idempotent (each call is a new snapshot). Data requests return the open request.
 
 ## Assessments for real accounts
-Always `assessment_type = insufficient_evidence`, no score. The model's features need per-problem solve history and a daily commit rate that provider data cannot supply without inventing values (see `docs/data/data-dictionary.md`). The snapshot (`evidence-v2`; older `evidence-v1` snapshots stay readable) holds CGPA (`user_entered`) and the latest run's observations per provider with `sync_run_id`, the weakest provenance among the rows, per-value `value_states`, and a `derived` list (e.g. `leetcode_solved_all`). A real-user ML score needs a decision on a validated feature set first (open).
+`POST /assessments` snapshots the caller's evidence (`evidence-v2`: CGPA as `user_entered`, the latest run's observations per provider with `sync_run_id`, the weakest provenance among the rows, per-value `value_states`, a `derived` list, and each connection's last sync run) and stores the deterministic **rules-v1** result in `result` (migration 009). Older `evidence-v1` snapshots stay readable and have `result: null`.
+
+`result` = `{assessment_version: "rules-v1", evidence_version, generated_at, stale_after_days, dimensions[], limitations}`. Each dimension (D1 activity consistency, D2 project footprint, D3 LeetCode volume only when `LEETCODE_INTEGRATION_ENABLED`, D4 CGPA context) has `evidence_state` (`no_evidence | stale | partial | sufficient | source_failed`), `values[]` (name, value, provenance, value_state, event_at_precision, collected_at, synced_at, sync_run_id), `rule {id, text}`, `coverage`, `caveats[]`, and `last_sync` after a failed/partial run. The staleness window (7 days) is proposed and unvalidated. A failed latest sync gives `source_failed` while the last-known-good values stay listed.
+
+`assessment_type` is `rules_assessment` when any provider dimension has values, otherwise `insufficient_evidence`. There is **no score and no composite**: `readiness_score` is null for real accounts. Implemented as rules-v1, not validated. Logic: `services/assessment.py`.
 
 ## Not built (no client needs them yet)
 Recommendations and progress state, assessment comparison, settings.

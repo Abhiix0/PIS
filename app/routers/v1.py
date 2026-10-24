@@ -5,15 +5,17 @@ with a +00:00 offset (the DB pool pins the session time zone to UTC).
 """
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
+import config
 from app.auth import Principal, current_principal, expensive
 from features.as_of import FEATURES_VERSION, activity_trend, features_as_of
 from ingest.db_connection import fetch_all, get_connection
+from services import assessment as rules
 from services import privacy, sync
 
 router = APIRouter(prefix="/api/v1")
@@ -23,10 +25,9 @@ EVIDENCE_VERSION = "evidence-v2"
 # Strongest to weakest; a block shows the weakest provenance among its rows (docs/data/data-dictionary.md).
 _PROVENANCE_ORDER = ("observed", "user_entered", "derived", "inferred", "synthetic")
 _LEETCODE_PARTS = ("leetcode_solved_easy", "leetcode_solved_medium", "leetcode_solved_hard")
-NO_SCORE_REASON = (
-    "No readiness proxy score for real accounts: the model's inputs (per-problem solve history, "
-    "daily commit rate) cannot be derived from provider data without inventing values. "
-    "This is an evidence summary only."
+RULES_REASON = (
+    "Per-dimension evidence states from fixed rules (rules-v1). There is no score: provider data cannot "
+    "support one without inventing values."
 )
 _MY_PROFILE = "SELECT id FROM profiles WHERE user_id = %s"
 
@@ -191,17 +192,44 @@ def data_quality(p: Principal = Depends(current_principal)):
 
 
 # ── Assessments ────────────────────────────────────────────────────────
+def _meta(precision, collected) -> dict:
+    return {"event_at_precision": precision, "collected_at": collected.isoformat()}
+
+
 def _build_evidence(cur, profile_id: str, cgpa) -> dict:
     """Latest run's observations per provider, with provenance and the run id they came from."""
-    ev = {
+    ev: dict[str, Any] = {
         "evidence_version": EVIDENCE_VERSION,
         "cgpa": None if cgpa is None else {"value": float(cgpa), "provenance": "user_entered"},
+        "runs": {},
     }
     for provider in ("github", "leetcode"):
         cur.execute(
             """
+            SELECT c.status, r.id::text, r.status, r.safe_error_code, r.completed_at
+            FROM integration_connections c LEFT JOIN LATERAL (
+                SELECT id, status, safe_error_code, completed_at FROM sync_runs
+                WHERE connection_id = c.id AND status <> 'running' ORDER BY started_at DESC LIMIT 1) r ON true
+            WHERE c.user_id = (SELECT user_id FROM profiles WHERE id = %s) AND c.provider = %s
+              AND c.status <> 'disconnected'
+        """,
+            (profile_id, provider),
+        )
+        conn_row = cur.fetchone()
+        ev["runs"][provider] = conn_row and {
+            "connection_status": conn_row[0],
+            "last_run": conn_row[1]
+            and {
+                "id": conn_row[1],
+                "status": conn_row[2],
+                "safe_error_code": conn_row[3],
+                "completed_at": conn_row[4] and conn_row[4].isoformat(),
+            },
+        }
+        cur.execute(
+            """
             SELECT o.observation_type, o.value_num::float, o.provenance::text, o.sync_run_id::text, r.completed_at,
-                   o.source_object_id, o.value_state::text
+                   o.source_object_id, o.value_state::text, o.event_at_precision, o.collected_at
             FROM source_observations o JOIN sync_runs r ON r.id = o.sync_run_id
             WHERE o.profile_id = %s AND o.provider = %s AND o.sync_run_id = (
                 SELECT sync_run_id FROM source_observations WHERE profile_id = %s AND provider = %s
@@ -216,13 +244,15 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
             continue
         values: dict[str, Any] = {}
         states: dict[str, str] = {}
+        meta: dict[str, dict] = {}
         days: dict[date, int] = {}
-        for typ, num, _, _, _, obj_id, state in rows:
+        for typ, num, _, _, _, obj_id, state, precision, collected in rows:
             if (
                 typ == "github_contribution_day"
             ):  # calendar days feed the trend rule, not the flat values
                 if num is not None:  # a missing day is unknown, never 0
                     days[date.fromisoformat(obj_id)] = int(num)
+                    meta.setdefault("activity_days", _meta(precision, collected))
             elif (
                 typ == "github_repo_commit_count"
             ):  # per-repo rows: report the sum and how many repos fed it
@@ -231,6 +261,8 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
                         "commits_in_sampled_repos", 0
                     ) + (num)
                     values["repos_sampled"] = values.get("repos_sampled", 0) + 1
+                    meta.setdefault("commits_in_sampled_repos", _meta(precision, collected))
+                    meta.setdefault("repos_sampled", _meta(precision, collected))
                     # measured_zero only if every sampled repo reported 0
                     prev = states.get("commits_in_sampled_repos", "measured_zero")
                     states["commits_in_sampled_repos"] = (
@@ -239,6 +271,7 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
             else:
                 values[typ] = num
                 states[typ] = state
+                meta[typ] = _meta(precision, collected)
         provenance = max((r[2] for r in rows), key=_PROVENANCE_ORDER.index)
         derived = []
         if all(values.get(k) is not None for k in _LEETCODE_PARTS):
@@ -255,8 +288,11 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
             "provenance": provenance,
             "values": values,
             "value_states": states,
+            "value_meta": meta,
             "derived": derived,
         }
+        if "leetcode_solved_all" in derived:
+            meta["leetcode_solved_all"] = meta["leetcode_solved_easy"]
         if (
             days
         ):  # deterministic rule, no model: active weeks last 4 vs previous 8 (features/as_of.py)
@@ -264,6 +300,7 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
             trend = activity_trend(f["weekly_counts"])
             direction = trend.pop("direction")
             values.update(trend)
+            meta.update({k: meta["activity_days"] for k in trend})
             block["activity_trend"] = {
                 "direction": direction,
                 "rule": "active weeks, last 4 vs previous 8",
@@ -276,7 +313,7 @@ def _build_evidence(cur, profile_id: str, cgpa) -> dict:
 
 _ASSESSMENT = (
     "id::text AS id, assessment_type, readiness_score::float AS readiness_score, category, reason, "
-    "model_version, created_at"
+    "model_version, result, created_at"
 )
 
 
@@ -284,23 +321,28 @@ _ASSESSMENT = (
     "/assessments", status_code=201, tags=["Assessments"], dependencies=[Depends(expensive)]
 )
 def create_assessment(p: Principal = Depends(current_principal)):
-    """Snapshot the caller's current evidence. Real accounts get an evidence summary and a non-score result
-    (`insufficient_evidence`) until a validated real-user feature pipeline exists; no number is invented."""
+    """Snapshot the caller's current evidence and the deterministic rules-v1 result computed from it. There is no
+    score: with provider evidence the type is `rules_assessment`, otherwise `insufficient_evidence`."""
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT id::text, cgpa FROM profiles WHERE user_id = %s", (p.user_id,))
         prof = cur.fetchone()
         if not prof:
             raise HTTPException(status_code=409, detail="Create a profile first.")
         ev = _build_evidence(cur, prof[0], prof[1])
-        reason = (
-            NO_SCORE_REASON
-            if (ev["github"] or ev["leetcode"])
-            else "No synced provider data yet. Connect an account and run a sync."
+        result = rules.compute_assessment(
+            ev, datetime.now(UTC), config.LEETCODE_INTEGRATION_ENABLED
         )
+        if rules.has_provider_evidence(result):
+            kind, reason = rules.RESULT_TYPE, RULES_REASON
+        else:
+            kind, reason = (
+                "insufficient_evidence",
+                "No synced provider data yet. Connect an account and run a sync.",
+            )
         cur.execute(
-            f"INSERT INTO assessments (profile_id, assessment_type, reason, evidence) "
-            f"VALUES (%s, 'insufficient_evidence', %s, %s::jsonb) RETURNING {_ASSESSMENT}",
-            (prof[0], reason, json.dumps(ev)),
+            f"INSERT INTO assessments (profile_id, assessment_type, reason, evidence, result) "
+            f"VALUES (%s, %s, %s, %s::jsonb, %s::jsonb) RETURNING {_ASSESSMENT}",
+            (prof[0], kind, reason, json.dumps(ev), json.dumps(result)),
         )
         return _dicts(cur)[0]
 

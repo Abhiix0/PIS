@@ -1,6 +1,6 @@
 # Intelligence and evaluation specification
 
-Status: **draft specification, not implemented, not validated.** Docs only. Path B (`../ml/target.md`) is itself "proposed, needs human sign-off". Every number below is **proposed** unless it is quoted from code, and quoted code values are product choices, not validated ones.
+Status: **dimension contract implemented as rules-v1 (2026-10-24, Phase 4), not validated.** Recommendations (§3) arrive in Phase 5; the parameters in §4 and the evaluation in §6 are not validated. Docs only. Path B (`../ml/target.md`) is itself "proposed, needs human sign-off". Every number below is **proposed** unless it is quoted from code, and quoted code values are product choices, not validated ones.
 
 Sources read for this file: `../ml/target.md`, `decisions/0005-ml-direction.md`, `../ml/experiment-protocol.md`, `domain-model.md`, `../data/provenance.md`, `../data/data-dictionary.md`, `../research/github-calendar-spike.md`, `../../features/as_of.py`, `../../apps/desktop/src/lib/assessment.ts`, `../../app/routers/v1.py` (`_build_evidence`, `create_assessment`).
 

@@ -61,7 +61,7 @@ def export_data(user_id: str) -> dict:
         "o.value_state::text AS value_state, o.quality_status FROM source_observations o "
         "JOIN profiles p ON p.id = o.profile_id WHERE p.user_id = %s ORDER BY o.collected_at",
         "assessments": "SELECT a.id::text AS id, a.assessment_type, a.readiness_score::float AS readiness_score, "
-        "a.category, a.reason, a.model_version, a.evidence, a.created_at FROM assessments a "
+        "a.category, a.reason, a.model_version, a.evidence, a.result, a.created_at FROM assessments a "
         "JOIN profiles p ON p.id = a.profile_id WHERE p.user_id = %s ORDER BY a.created_at",
         "data_requests": "SELECT kind, status, requested_at, updated_at FROM data_requests WHERE user_id = %s "
         "ORDER BY requested_at",

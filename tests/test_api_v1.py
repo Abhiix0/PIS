@@ -170,10 +170,17 @@ def test_assessment_is_a_non_score_evidence_snapshot(user):
     assert r.status_code == 201
     a = r.json()
     assert (
-        a["assessment_type"] == "insufficient_evidence"
+        a["assessment_type"] == "rules_assessment"
         and a["readiness_score"] is None
         and a["model_version"] is None
     )
+    assert (
+        a["result"]["assessment_version"] == "rules-v1"
+        and "score':" not in str(a["result"]).lower()
+    )
+    d = {x["dimension"]: x for x in a["result"]["dimensions"]}
+    assert d["D2"]["evidence_state"] == "sufficient" and d["D1"]["evidence_state"] == "no_evidence"
+    assert d["D4"]["values"][0]["provenance"] == "user_entered"
     ev = user.get(f"/assessments/{a['id']}/evidence").json()["evidence"]
     assert ev["cgpa"] == {"value": 8.1, "provenance": "user_entered"}
     assert (
@@ -188,7 +195,13 @@ def test_assessment_without_data_says_so_and_needs_a_profile():
     error_of(U().post("/assessments"), 409, "conflict")
     u = U()
     u.put("/me/profile", json={"display_name": "T"})
-    assert "No synced provider data" in u.post("/assessments").json()["reason"]
+    a = u.post("/assessments").json()
+    assert (
+        "No synced provider data" in a["reason"] and a["assessment_type"] == "insufficient_evidence"
+    )
+    assert {x["evidence_state"] for x in a["result"]["dimensions"] if x["dimension"] != "D4"} == {
+        "no_evidence"
+    }
 
 
 def test_assessment_history_is_paginated_newest_first(user):
@@ -351,6 +364,9 @@ class _Cur:
     def fetchall(self):
         return self.rows
 
+    def fetchone(self):
+        return None
+
 
 def test_block_provenance_is_the_weakest_and_independent_of_row_order():
     from datetime import UTC, datetime
@@ -358,8 +374,8 @@ def test_block_provenance_is_the_weakest_and_independent_of_row_order():
     from app.routers.v1 import _build_evidence
 
     t = datetime(2024, 1, 1, tzinfo=UTC)
-    a = ("leetcode_solved_easy", 1.0, "observed", "r1", t, None, "present")
-    b = ("leetcode_solved_hard", 0.0, "inferred", "r1", t, None, "measured_zero")
+    a = ("leetcode_solved_easy", 1.0, "observed", "r1", t, None, "present", "unknown", t)
+    b = ("leetcode_solved_hard", 0.0, "inferred", "r1", t, None, "measured_zero", "unknown", t)
     for rows in ([a, b], [b, a]):
         blk = _build_evidence(_Cur(rows), "p", None)["leetcode"]
         assert blk["provenance"] == "inferred" and blk["value_states"]["leetcode_solved_hard"] == (
@@ -373,7 +389,19 @@ def test_missing_calendar_day_is_not_counted_as_zero():
     from app.routers.v1 import _build_evidence
 
     t = datetime(2024, 1, 1, tzinfo=UTC)
-    rows = [("github_contribution_day", None, "observed", "r1", t, "2024-01-01", "not_collected")]
+    rows = [
+        (
+            "github_contribution_day",
+            None,
+            "observed",
+            "r1",
+            t,
+            "2024-01-01",
+            "not_collected",
+            "day",
+            t,
+        )
+    ]
     blk = _build_evidence(_Cur(rows), "p", None)["github"]
     assert "activity_trend" not in blk and blk["values"] == {}
 
