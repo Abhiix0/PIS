@@ -185,6 +185,20 @@ export default function Overview() {
         )}
         <p className="muted">{DISCLAIMER}</p>
       </Card>
+      <Card className="stack" aria-labelledby="h-about">
+        <h2 id="h-about">About this assessment</h2>
+        <p>
+          {r?.limitations ??
+            "This is an evidence summary. It does not estimate hiring or placement outcomes."}
+        </p>
+        <ul>
+          {dims.map((d) => (
+            <li key={d.dimension}>
+              <strong>{d.title}:</strong> {d.coverage} Cannot establish: {d.caveats[0]}
+            </li>
+          ))}
+        </ul>
+      </Card>
     </>
   );
 }

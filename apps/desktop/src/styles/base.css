@@ -21,7 +21,7 @@ h2 {
   font-weight: var(--fw-bold);
 }
 :focus-visible {
-  outline: none;
+  outline: 2px solid transparent; /* stays visible in forced-colors mode */
   box-shadow: var(--focus);
 }
 .muted {

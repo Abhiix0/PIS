@@ -40,3 +40,15 @@ Source: `docs/design/reference.png` (Dribbble "Job Finder Landing Website", Jobi
 | `AppShell` | Dark sidebar nav (`aria-label="Primary"`, `aria-current` on active), white top bar with status slot, `<main>`. |
 
 Tests: `src/components/components.test.tsx`.
+
+## Accessibility pass (Phase 6.2, 2026-10-24)
+Contrast of the token pairs used in `components.css` was computed (WCAG 2.x, AA 4.5:1 text, 3:1 large text) and is now enforced by `Phase62.test.tsx`. Two pairs failed and were fixed by darkening the foreground token only:
+
+| Pair | Before | After |
+|---|---|---|
+| `--ok` on `--ok-bg` (badge) | `#15803d`, 4.47:1 | `#157a3a`, 4.82:1 |
+| `--info` on `--info-bg` (badge) | `#3a6bfa`, 3.91:1 | `#2f5fe0`, 4.76:1 (white on `--info` is 5.48:1) |
+
+All other pairs passed (lowest: `--warn` on `--warn-bg` 4.51:1, `--bg` on `--info` was 4.50:1 and is now higher). Dark mode does not exist, so only light tokens were checked.
+
+Focus: `:focus-visible` keeps the ring and adds a transparent outline so it stays visible in forced-colors mode. Layout: no horizontal page scroll at 1100x760, 800x560, 640x420, 533x373 and 400x280 (100% to 200% scaling of the minimum window), checked with Playwright in mock mode on all seven screens; below 720 px the navigation moves above the content. Tables scroll inside `.tbl-wrap`. Not done: a screen-reader run and a real Windows DPI test (manual checklist).

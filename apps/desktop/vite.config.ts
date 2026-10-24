@@ -6,5 +6,10 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: { port: 1420, strictPort: true },
-  test: { environment: "jsdom", globals: true, setupFiles: ["./src/test-setup.ts"] },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test-setup.ts"],
+    css: { include: [/tokens.css/] }, // Phase62.test.tsx reads the design tokens as text
+  },
 });

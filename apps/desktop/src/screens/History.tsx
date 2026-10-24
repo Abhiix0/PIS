@@ -108,26 +108,28 @@ export default function History() {
               {d.only_in ? (
                 <p>Present only in the {d.only_in === "from" ? "earlier" : "later"} snapshot.</p>
               ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Earlier</th>
-                      <th>Later</th>
-                      <th>Change</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.deltas.map((x) => (
-                      <tr key={x.name}>
-                        <td>{x.name}</td>
-                        <td>{x.from ?? "—"}</td>
-                        <td>{x.to ?? "—"}</td>
-                        <td>{x.delta ?? "—"}</td>
+                <div className="tbl-wrap">
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Earlier</th>
+                        <th>Later</th>
+                        <th>Change</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                    </thead>
+                    <tbody>
+                      {d.deltas.map((x) => (
+                        <tr key={x.name}>
+                          <td>{x.name}</td>
+                          <td>{x.from ?? "—"}</td>
+                          <td>{x.to ?? "—"}</td>
+                          <td>{x.delta ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
               )}
             </div>
           ))}
