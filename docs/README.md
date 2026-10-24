@@ -24,6 +24,7 @@ Docs describe the repository as it is. Start with [architecture/current-state.md
 | | [desktop-session](security/desktop-session.md) | OIDC + PKCE sign-in |
 | | [hardening](security/hardening.md) | partial hardening report |
 | Ops (**future**: nothing here has run against real infrastructure) | [runbook](ops/runbook.md) | AWS staging/production runbook |
+| Ops | [free-hosting](ops/free-hosting.md), [pilot-plan](ops/release/pilot-plan.md) | $0 hosting comparison; pilot kit (drafts) |
 | | [release/](ops/release/) | installer, signing, release notes, clean-machine matrix |
 | Research | [literature-and-competitors](research/literature-and-competitors.md), [data-source-feasibility](research/data-source-feasibility.md) | background |
 | Design | [desktop](design/desktop.md) | desktop shell. No separate design-system document exists yet |
