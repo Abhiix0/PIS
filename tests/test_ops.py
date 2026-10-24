@@ -174,3 +174,45 @@ def test_unhandled_error_is_logged_with_its_request_id_and_not_returned(caplog):
     assert r.status_code == 500 and "secret-internal" not in r.text
     assert r.json()["error"]["request_id"] == "rid-err-1"
     assert any("rid-err-1" in rec.getMessage() for rec in caplog.records)
+
+
+def test_dead_pooled_connection_is_replaced_not_surfaced():
+    from psycopg2 import OperationalError
+
+    from ingest import db_connection
+
+    class Conn:
+        def __init__(self, dead):
+            self.dead, self.closed = dead, False
+
+        def cursor(self):
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql):
+            if self.dead:
+                raise OperationalError("server closed the connection")
+
+        def rollback(self):
+            pass
+
+    class Pool:
+        def __init__(self):
+            self.conns = [Conn(True), Conn(False)]
+            self.discarded = []
+
+        def getconn(self):
+            return self.conns.pop(0)
+
+        def putconn(self, conn, close=False):
+            self.discarded.append((conn, close))
+
+    p = Pool()
+    with patch.object(db_connection, "_get_pool", return_value=p):
+        live = db_connection._checkout()
+    assert live.dead is False and p.discarded[0][1] is True

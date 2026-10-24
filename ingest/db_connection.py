@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 import pandas as pd
-from psycopg2 import pool
+from psycopg2 import InterfaceError, OperationalError, pool
 
 from config import DATABASE_URL
 
@@ -34,10 +34,26 @@ def close_pool() -> None:
         _pool = None
 
 
+def _checkout():
+    """A live pooled connection. Hosts that suspend an idle database (e.g. free tiers) drop pooled connections;
+    a dead one is discarded and replaced instead of failing the request."""
+    p = _get_pool()
+    for _ in range(3):
+        conn = p.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            conn.rollback()
+            return conn
+        except (OperationalError, InterfaceError):
+            p.putconn(conn, close=True)
+    return p.getconn()
+
+
 @contextmanager
 def get_connection():
     """Borrow a connection from the pool, commit on success, rollback on error."""
-    conn = _get_pool().getconn()
+    conn = _checkout()
     try:
         yield conn
         conn.commit()
