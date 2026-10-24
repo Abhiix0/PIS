@@ -6,21 +6,24 @@ Sources read for this file: `../ml/target.md`, `decisions/0005-ml-direction.md`,
 
 ## 0. Owner decisions for this unit
 
-None of the seven decisions was answered (the placeholders came through unfilled). All are **OPEN**; none is assumed.
+Recorded 2026-10-24 from the owner's instruction to use the roadmap defaults. Decisions not listed as Approved are OPEN.
 
 | # | Decision | Status |
 |---|---|---|
-| 1 | Path B + wording rules approved? | OPEN |
-| 2 | Composite score or dimension-level evidence states only? | OPEN. This spec defines dimension-level states only (§3); a composite is not specified. |
-| 3 | Store CGPA? | OPEN. The Academic dimension (D4) is contingent. |
-| 4 | LeetCode: keep vs manual entry? | OPEN. D3 is specified for the existing adapter only; manual entry is not specified. |
-| 5 | GitHub scope: public-only vs OAuth later? | OPEN. Spec assumes the current behaviour (public username, `../data/provenance.md`), which is a "conservative default", not a decision. |
-| 6 | Consent / recruitment route for RQ1 | OPEN |
-| 7 | Dimensions in v1 | OPEN. D1–D4 below are **candidates**. |
+| 1 | Path B + wording rules approved? | **Approved 2026-10-24**: no placement or hiring predictions. |
+| 2 | Composite score or dimension-level evidence states only? | **Approved 2026-10-24**: no composite for the MVP; dimension-level states only (§3). |
+| 3 | Store CGPA? | **Approved 2026-10-24**: optional, self-reported context only (D4). Excluded from evidence states and recommendations. |
+| 4 | LeetCode: keep vs manual entry? | **Approved 2026-10-24**: stays disabled (`LEETCODE_INTEGRATION_ENABLED=false`) until the owner reads the ToS. Manual entry is not specified. |
+| 5 | GitHub scope: public-only vs OAuth later? | **Approved 2026-10-24**: public username only for the MVP; existing calendar flags unchanged; OAuth later. |
+| 6 | Consent / recruitment route for RQ1 | **Approved 2026-10-24** (separate opt-in); forecasting research deferred until consent text, recruitment and data exist. |
+| 7 | Dimensions in v1 | **Approved 2026-10-24**: D1 activity, D2 project footprint, D3 LeetCode (flag-gated, off), D4 CGPA as context only. |
+| 8 | Identity provider | OPEN. Clerk is to be evaluated against loopback PKCE on any port, `offline_access` and a role claim; otherwise another OIDC provider. Not verified (Phase 3.2). |
 
-Consequence: the status lines in `../ml/target.md` and ADR 0005 are unchanged.
+Outside this spec: AWS region is OPEN (depends on the free-host comparison); infrastructure budget is $0/month; signing is unsigned pilot with manual GitHub Releases (roadmap decisions 9, 10, 12).
 
-## 1. Dimensions (candidates)
+Consequence: `../ml/target.md` §6 and ADR 0005 record the same approvals. Nothing here is implemented or validated; the numbers below stay "proposed".
+
+## 1. Dimensions (v1 set approved; contents proposed)
 
 Current behaviour: real accounts get `assessment_type = 'insufficient_evidence'` and no score (`app/routers/v1.py` `create_assessment`, `NO_SCORE_REASON`). `_build_evidence` (`evidence-v1`) already assembles per-provider evidence blocks. The dimensions below organise that evidence; none is a new score.
 
@@ -47,20 +50,20 @@ Wording rule (from `../ml/target.md` §3): "preparation assessment" / "readiness
 ### D3 LeetCode practice volume
 | Item | Content |
 |---|---|
-| Observable evidence | `leetcode_solved_easy`, `leetcode_solved_medium`, `leetcode_solved_hard`; `_build_evidence` also surfaces `leetcode_solved_all`, which `apps/desktop/src/lib/assessment.ts` consumes. Whether `leetcode_solved_all` is a stored observation or derived is **not verified** here: it is not in the observation-type table of `../data/data-dictionary.md`. |
+| Observable evidence | `leetcode_solved_easy`, `leetcode_solved_medium`, `leetcode_solved_hard`; `apps/desktop/src/lib/assessment.ts` consumes `leetcode_solved_all`, but the backend does **not** emit it today (only `_easy/_medium/_hard`; verified by grep). Phase 3.1 adds it as a derived sum when all three are present. |
 | Can state | Accepted-problem counts by difficulty at fetch time. |
 | Cannot establish | When problems were solved, so no consistency or trend (`consistency_score` is "not computable for real LeetCode users", data dictionary). Not problem-solving ability or interview performance. |
 | Provenance class | `observed`, `granularity=aggregate`, `event_at` NULL (precision `unknown`); time = `collected_at` only. |
 | Collection source | Unofficial LeetCode GraphQL; disabled by default (`LEETCODE_INTEGRATION_ENABLED=false`); ToS unverified. Contingent on decision 4. |
 
-### D4 Academic (contingent on decision 3)
+### D4 Academic (context only, decision 3)
 | Item | Content |
 |---|---|
 | Observable evidence | `profiles.cgpa`, 0–10 (`../data/data-dictionary.md`). Not a `source_observations` row today ("user-entered CGPA as an observation" is listed under "Not done", `../data/provenance.md`). `_build_evidence` carries it as `{value, provenance: "user_entered"}`. |
 | Can state | The value the student entered, labelled self-reported. |
 | Cannot establish | That it is verified, or comparable across institutions or scales. |
 | Provenance class | `user_entered`. |
-| Collection source | Profile form. Domain model: "CGPA retained only if justified (PRD §19#5)". |
+| Collection source | Profile form. Domain model: "CGPA retained only if justified (PRD §19#5)". Decision 3: context only, never counted as evidence or used in recommendations. |
 
 ## 2. Missing, stale and zero semantics
 
@@ -84,7 +87,7 @@ Inconsistencies found (for the owner, not resolved here):
 
 ## 3. Output contract per dimension
 
-No composite number. Decision 2 is OPEN, so this contract defines per-dimension states only; a composite is not specified.
+No composite number (decision 2, approved): this contract defines per-dimension states only.
 
 Each dimension returns one object:
 
@@ -187,7 +190,7 @@ Open decisions:
 - ADR 0005 Open items: "Owner approval of RQ1, baselines and split design." / "Recruitment and consent route." / "Retire the legacy RF score fully (API field and demo path)."
 - `domain-model.md` §9: "Whether `cgpa` is stored at all (§19#5) and the backup retention window (§7) are open."
 - `../ml/target.md` status: "proposed, needs human sign-off".
-- Not decided by the docs read: composite score vs dimension-level states (decision 2), v1 dimension set (decision 7).
+- Decided 2026-10-24: see §0 (decisions 1-7). Still open: IdP vendor, region, publisher string.
 
 Unverified items:
 - `../ml/experiment-protocol.md` §B4: "Window limit", "Timezone", "Private contributions", "ToS / API terms" are listed as "Still unverified".
@@ -196,4 +199,4 @@ Unverified items:
 - `../data/provenance.md`: LeetCode "terms unverified".
 - `../ml/experiment-protocol.md` §B2: "at least a few hundred users … is a placeholder, **unverified**, to be replaced by a power calculation."
 - `domain-model.md` §9: "`draft-schema.sql` has not been run."
-- Found while writing this spec, not in prior docs: whether `leetcode_solved_all` is a stored or derived value; the `rows[0]` provenance choice in `_build_evidence`; `audit-report.md` figures not re-read.
+- Found while writing this spec, not in prior docs: `leetcode_solved_all` is not emitted by the backend (defect, fix scheduled in Phase 3.1); the `rows[0]` provenance choice in `_build_evidence`; `audit-report.md` figures not re-read.

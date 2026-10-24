@@ -2119,23 +2119,29 @@ answers in implementation.
 
 1.  **Initial assessment target:** Actual placement-related outcome, or
     preparation assessment until valid outcome data is available?
+    *Decided 2026-10-24: preparation assessment (Path B); see `docs/ml/target.md`.*
 2.  **Identity mechanism:** Managed identity provider, email
     verification, or another approach?
 3.  **GitHub access:** Public profile-only integration, delegated
     authorization, or both?
+    *Decided 2026-10-24: public username only for the MVP.*
 4.  **LeetCode source:** Is the intended data interface stable,
     permitted, and sufficient for the required feature semantics?
+    *Decided 2026-10-24: disabled until the owner reads the ToS.*
 5.  **CGPA and academic data:** Which fields are genuinely necessary and
     optional?
+    *Decided 2026-10-24: optional self-reported context only.*
 6.  **Cloud provider:** Which provider offers the best combination of
     cost, managed PostgreSQL, secret management, backups, and deployment
     simplicity?
+    *Open: owner budget is $0/month (2026-10-24); see `docs/architecture/decisions/0004-aws-hosting.md`.*
 7.  **Background jobs:** At what measured workload should a worker/queue
     be introduced?
 8.  **Model artifact storage:** Local deployment artifact, object
     storage, or a dedicated registry?
 9.  **Desktop updater:** Which secure signing and update mechanism will
     be used?
+    *Decided 2026-10-24 for the pilot: unsigned, manual GitHub Releases.*
 10. **Analytics:** Which minimal, disclosed product analytics are
     acceptable?
 11. **Report export:** PDF, CSV, or both in the first release?

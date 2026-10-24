@@ -1,6 +1,6 @@
 # ADR 0004 — Hosting: AWS (ECS Fargate + RDS PostgreSQL)
 
-Status: accepted (owner decision, hosting work). Region, budget and account IDs are **not yet decided** — see Open items.
+Status: accepted (owner decision, hosting work), **now under review**. Owner decision 10 (2026-10-24) sets infrastructure spend to $0/month, which conflicts with the cost drivers below (ALB, NAT, RDS). AWS stays only if a complete $0 setup is verified; otherwise a free host is chosen in Phase 7. Region is OPEN.
 
 ## Context
 Backend = FastAPI container + PostgreSQL 15 (psycopg2). Needs: managed Postgres 15, secret store, private DB networking, PITR backups, logs/alarms, rollback, budget alerts (plan §15.1).
@@ -27,6 +27,6 @@ AWS. Chosen for network isolation (private DB reachable only from the app securi
 
 ## Open items (need an owner decision before first apply)
 1. Region / data residency (student data; privacy policy in `docs/data/privacy-and-retention.md`).
-2. Monthly budget per environment (`monthly_budget_usd`).
-3. Production IdP issuer/audience/JWKS (the IdP vendor was left open).
+2. Monthly budget per environment: decided 2026-10-24, $0/month, free services only (no paid resource, even temporarily).
+3. Production IdP issuer/audience/JWKS (vendor OPEN; Clerk to be evaluated, Phase 3.2).
 4. Whether Multi-AZ production is worth the cost at launch scale.

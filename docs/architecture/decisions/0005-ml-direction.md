@@ -1,6 +1,6 @@
 # ADR 0005 — ML direction: preparation intelligence, RQ1 as an isolated offline experiment
 
-Status: **proposed** (needs owner sign-off; `docs/ml/target.md` §6 and `docs/ml/experiment-protocol.md` §B6). Nothing here is implemented by this ADR.
+Status: **Path B and wording approved 2026-10-24; RQ1 approval and consent route still OPEN** (see `docs/ml/target.md` §6 and `docs/ml/experiment-protocol.md` §B6). Nothing here is implemented by this ADR.
 
 ## Context
 - No real placement outcomes exist. `sql/seed.sql` has 8 hand-written students; labels in `ml/labels.py` are a weighted formula of the same features plus N(0,5) noise (`docs/ml/target.md` §2).

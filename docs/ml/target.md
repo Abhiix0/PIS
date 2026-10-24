@@ -1,6 +1,6 @@
 # Product Target and Assessment Semantics
 
-Status: **proposed, needs human sign-off** (see §6). Access date for all web sources: 2026-10-13.
+Status: **Path B and wording approved 2026-10-24** (decision 1); other items in §6 as marked. Access date for all web sources: 2026-10-13.
 
 ## 1. Decision
 
@@ -24,7 +24,7 @@ Reopen Path A only if an institution supplies per-student, timestamped outcomes 
 
 - Name it **"Preparation assessment"** / **"readiness proxy score"**. Never "placement probability", "chance of getting placed", or "prediction of hiring".
 - The existing 0–100 score is a weighted formula of five features. Until replaced, UI/API must describe it as a heuristic summary, not a learned or validated outcome.
-- Every displayed metric carries a provenance class (`observed` | `user_entered` | `aggregate` | `inferred` | `synthetic`), a collection timestamp, and freshness (FR-INT-006/008).
+- Every displayed metric carries a provenance class (`observed` | `user_entered` | `derived` | `inferred` | `synthetic`; aggregate-ness is carried by `granularity`, per `../architecture/domain-model.md` §3), a collection timestamp, and freshness (FR-INT-006/008).
 - Missing states are distinct: `not_connected`, `unavailable`, `stale`, `error`, genuine `0` (FR-DATA-003).
 - Synthetic/demo data appears only in a visibly labelled demo mode and is never merged into a real user's assessment.
 - Gap detection and recommendations are rule-based and state their rule and source ("Fewer than 2 active weeks in the last 90 days, from GitHub commits you authored").
@@ -43,13 +43,13 @@ A student deciding **what to practise next** and whether their activity is trend
 
 Proposed in `../architecture/decisions/0005-ml-direction.md` (needs human sign-off):
 
-1. Path B and the wording rules above (PRD §19 #1). Outcome prediction closed; reopen conditions are in the ADR.
+1. Path B and the wording rules above (PRD §19 #1). **Approved 2026-10-24.** Outcome prediction closed; reopen conditions are in the ADR.
 2. The first ML task is RQ1 in `experiment-protocol.md` §B: forecast **active weeks** in the next 4 weeks from daily GitHub contribution counts. Isolated offline experiment, not wired into the product score.
 3. The legacy RandomForest score is a heuristic proxy, quarantined from the real-user path. UI copy relabelled "Demo formula score" (ADR 0005, 2026-10-19); full retirement (API field) still open.
 
 Still unresolved:
 
-4. GitHub: public username only vs OAuth device flow (§19 #3). Recommendation: public-only first, OAuth later. RQ1's collector (GraphQL calendar, server token) has unverified points: window limit, timezone, private contributions, ToS (protocol §B4).
-5. LeetCode: keep the integration only as labelled aggregates, or use manual entry. ToS not verified (§19 #4).
+4. GitHub: public username only vs OAuth device flow (§19 #3). **Decided 2026-10-24: public username only for the MVP, OAuth later.** RQ1's collector (GraphQL calendar, server token) has unverified points: window limit, timezone, private contributions, ToS (protocol §B4).
+5. LeetCode: keep the integration only as labelled aggregates, or use manual entry. ToS not verified (§19 #4). **Decided 2026-10-24: disabled until the owner reads the ToS;** manual entry stays undecided.
 6. Whether any placement outcomes will ever be collected, from whom, with what consent (§19 #14, #13).
-7. Consent and recruitment route for RQ1 (protocol §B6).
+7. Consent and recruitment route for RQ1 (protocol §B6). **Decided 2026-10-24: separate opt-in; forecasting research deferred until consent text and data exist.** RQ1 approval itself (item 2) remains open.

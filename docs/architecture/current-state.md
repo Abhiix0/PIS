@@ -79,7 +79,7 @@ Provenance rules: `../data/provenance.md`. Privacy export/deletion/audit: `servi
 - GitHub `commit_date`/`event_at` is the repo's `pushed_at`; LeetCode is aggregate-only.
 - Legacy `students` tables, the scaler fit on all rows, and the feature SQL are still demo-scale (8 rows).
 - Rate limiting is per process.
-- `sqlalchemy` is listed in `requirements.txt` but the code uses `psycopg2` only (grep not exhaustive, unverified).
+- `sqlalchemy` is not in `requirements.txt` or `requirements-dev.txt`, and no `.py` file imports it (grep, 2026-10-24).
 - The `Dockerfile` has `COPY . .`; `.dockerignore` excludes `.env`, `venv/` and `.env.*` (read, image not built).
 - Stack boot (`make up`) end to end, the AWS deployment, signed installers and clean-machine installs are unverified.
 
