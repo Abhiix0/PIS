@@ -16,6 +16,7 @@ services:
       retries: 5
 
   api:
+    user: root  # local only: bind-mounted models/ on Docker Desktop rejects chmod by a non-root uid; the image itself runs as non-root
     build:
       context: .
       args:
