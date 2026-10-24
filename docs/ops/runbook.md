@@ -1,8 +1,8 @@
 # Staging / Production Runbook (AWS)
 
-> **Future:** the AWS deployment described here has not been run against a real account.
+> **Future:** the AWS deployment described here has not been run against a real account. **Owner decision 10 (2026-10-24): infrastructure budget is $0/month.** AWS is used only if the whole setup can be proven free; the ALB, RDS and NAT below are not. Hosting is chosen in Phase 7.2 after a free-host comparison. The sections below describe the AWS option and stay as written.
 
-Status legend: **[done]** verified locally, **[unverified]** written but never executed, **[todo]** requires a real AWS account.
+Status legend: **[done: local]** rehearsed on a local scratch database or container, **[done]** verified by a test, **[unverified]** written but never executed, **[todo]** requires a real hosting account. Nothing in this file has been executed against a cloud account.
 
 ## 1. Environments
 | | local | test | staging | production |
@@ -49,7 +49,8 @@ Sizing: API 0.5 vCPU / 1 GB, 1 task staging / 2 production; stop timeout 30 s. T
 
 ## 6. Database access, backups, restore
 - **Least privilege gap:** the migrate task and API currently share one `DATABASE_URL` secret, so the app role must be able to run DDL. Splitting into a migration role (DDL) and an app role (DML only) needs a separate `MIGRATE_DATABASE_URL` in `ingest/migrate.py`. Not implemented. Until then use a dedicated non-superuser role (not the RDS master) for `DATABASE_URL`. **[open]**
-- Backups: automated, encrypted, 14-day PITR, 02:00–03:00 UTC window; production keeps a final snapshot. **[unverified]**
+- Backups: automated, encrypted, 14-day PITR, 02:00–03:00 UTC window; production keeps a final snapshot. **[unverified]** The 14 days is inside the 35-day ceiling in `docs/data/privacy-and-retention.md`.
+- **Local dump/restore rehearsal [done: local], 2026-10-24** (scratch Postgres 15 container, never a real database): `python -m ingest.migrate --seed` into `rehearse`, then `pg_dump -Fc -d rehearse -f rehearse.dump`, `createdb rehearse_restored`, `pg_restore --no-owner -d rehearse_restored rehearse.dump`. Row counts compared with one `select ... count(*)` per table (students 8, users 1, coding_activity 79, github_activity 23, features 0, schema_migrations 11, assessments 0): identical. Note: a pg_dump 18 client against a 15 server wrote `SET transaction_timeout`, which a 15 server rejects on restore (one harmless error, all data restored); use a `pg_dump` of the server's major version. This proves the procedure on a local database only, not a managed service, PITR or RTO.
 - Targets (proposed, owner to confirm): RPO ≤ 5 min (PITR), RTO ≤ 4 h.
 - **Restore drill [todo]:** `aws rds restore-db-instance-to-point-in-time` into a new instance → point a scratch task at it → `python -m ingest.migrate` reports nothing pending → `/health/ready` 200 and a profile read works → record date, duration, and row counts here. No evidence exists yet.
 
@@ -84,3 +85,10 @@ Default is off. In staging/production it needs `GITHUB_CALENDAR_ENABLED=true` **
 3. Volunteers only after the consent text is reviewed by the owner/legal. Each volunteer must explicitly agree beforehand (written); no one's data is collected without it. They connect their own username themselves.
 4. Research export only for users with consent set: `python -m ml.forecast.export --out <dir> --i-understand-this-exports-research-data`. Keep files outside the repo; they cannot be recalled.
 5. Stop: disconnect with data deletion or delete the account; set the flag back to `false`.
+
+## 12. Local preparation results (Phase 7.1, 2026-10-24)
+No AWS credentials were used and no AWS, ECR or registry call was made.
+- Terraform 1.9 (Docker image `hashicorp/terraform:1.9`, provider download only): `fmt` applied (whitespace in 4 lines of `main.tf`); `init -backend=false` and `validate` on a scratch copy: **"Success! The configuration is valid."** **[done: local]** `plan` was not run (needs variables and credentials).
+- `deploy/aws/release.sh`: added `--dry-run` (prints every step, runs no docker/terraform/aws; git is read only) and removed the `models/bundles` pre-check, which contradicted Phase 1.1 (deployed environments need no model). Checked: `sh -n` passes; a dirty tree aborts with exit 1; a dry run with an explicit tag prints the plan and exits 0. Migration failure aborts by reading (`[ "$CODE" = "0" ] || ... exit 1`, set -eu); not executed. `shellcheck` is not installed (not run). **[done: local]** for dry-run and abort, **[unverified]** for the real release.
+- Review of `main.tf`: HTTPS listener takes `certificate_arn`; target group health path `/health/ready`; RDS `publicly_accessible = false`, Multi-AZ and deletion protection only for production, 14-day backups; DB URL and GitHub token come from Secrets Manager (the `?sslmode=require` instruction is in §2); log retention 30 days; seven alarms plus an SNS subscription and a budget; desired count 1 (staging) / 2 (production); task 512 CPU / 1024 MB. The VPC, subnets and NAT are inputs, not resources of this file. Under the $0 decision these are all chargeable except possibly parts of an account's free tier: **cost drivers** are the ALB (hourly + LCU), Fargate vCPU/GB-hours, RDS instance + storage + backups, NAT gateway (hourly + data) or its alternatives, Secrets Manager (per secret), CloudWatch logs/alarms, ECR storage, data transfer. AWS Pricing Calculator inputs would be: region, task count and size, hours per month, RDS class/storage/Multi-AZ, NAT count and GB processed, ALB LCUs, secrets count, log GB. No prices are stated here.
+- Logging: tests added (`tests/test_ops.py`): the `X-Request-ID` appears in logs and the 500 envelope, and a bearer token never appears in log records. Known: unhandled errors log the exception message (`app/main.py`), which could contain driver text; it is not returned to callers. **[done]**

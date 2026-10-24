@@ -13,7 +13,7 @@ terraform {
   backend "s3" {}
 }
 
-variable "env" { type = string } # staging | production
+variable "env" { type = string }    # staging | production
 variable "region" { type = string } # data residency: see docs/architecture/decisions/0004-aws-hosting.md
 variable "vpc_id" { type = string }
 variable "private_subnets" { type = list(string) }
@@ -223,9 +223,9 @@ resource "aws_ecs_task_definition" "migrate" {
 
 # ---- Load balancer + service (rolling deploy; circuit breaker rolls back a failing release) ----
 resource "aws_lb" "alb" {
-  name               = local.name
-  subnets            = var.public_subnets
-  security_groups    = [aws_security_group.alb.id]
+  name                       = local.name
+  subnets                    = var.public_subnets
+  security_groups            = [aws_security_group.alb.id]
   drop_invalid_header_fields = true
 }
 

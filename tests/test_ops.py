@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.logger import JsonFormatter
 from app.main import app
+from tests.conftest import bearer, make_token
 
 client = TestClient(app)
 
@@ -150,3 +151,26 @@ def test_cors_allowed_origin_and_preflight(monkeypatch):
 def test_cors_default_denies_every_origin():
     r = client.get("/health", headers={"Origin": "http://tauri.localhost"})
     assert "access-control-allow-origin" not in r.headers
+
+
+def test_logs_carry_the_request_id_and_never_the_bearer_token(caplog):
+    token = make_token("log-check", aud="wrong-audience")  # rejected before any DB access
+    with caplog.at_level(logging.INFO, logger="pis"):
+        r = client.get("/api/v1/me", headers={**bearer(token), "X-Request-ID": "rid-log-1"})
+    assert r.headers["x-request-id"] == "rid-log-1"
+    text = " ".join(
+        f"{rec.getMessage()} {rec.__dict__.get('request_id')}" for rec in caplog.records
+    )
+    assert "rid-log-1" in text and token not in text and "Bearer" not in text
+
+
+def test_unhandled_error_is_logged_with_its_request_id_and_not_returned(caplog):
+    quiet = TestClient(app, raise_server_exceptions=False)
+    with (
+        caplog.at_level(logging.ERROR, logger="pis"),
+        patch("app.main.check_db_connection", side_effect=RuntimeError("secret-internal")),
+    ):
+        r = quiet.get("/health/detailed", headers={"X-Request-ID": "rid-err-1"})
+    assert r.status_code == 500 and "secret-internal" not in r.text
+    assert r.json()["error"]["request_id"] == "rid-err-1"
+    assert any("rid-err-1" in rec.getMessage() for rec in caplog.records)
