@@ -9,8 +9,12 @@ Phase 1 / Unit 4. Written from source reading plus one DB-free test run made for
 | Command | Status | Evidence |
 |---|---|---|
 | `venv/Scripts/python.exe -m pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_route_coverage.py tests/test_forecast.py tests/test_as_of.py -q` | **Pass** (ran, this unit) | 132 passed, 7 warnings (a scipy `L-BFGS-B` deprecation in forecast tests). Python version of `venv` not recorded. |
-| Full backend pytest (DB tests) | Not run (this unit). Last recorded: 277 passed, 3 seeds, 82.50% coverage (Phase 1b, `audit-report.md`) | Needs `TEST_ADMIN_DATABASE_URL`; not set up here. |
-| `ruff check`, `ruff format --check`, `mypy` | Not run (this unit). Last recorded: clean (Phase 1b) | Not re-run. |
+| Full backend pytest with coverage (`--cov=app --cov=services --cov=ml --cov=ingest`) | Not run (Unit 2.1). No usable DB: `.env` `DATABASE_URL` points at localhost:5433 (connection refused); a server listens on 5432 (psql 18.4 client) but rejected the `.env` credentials, and no `TEST_ADMIN_DATABASE_URL` is set. Last recorded: 277 passed, 82.50% coverage (Phase 1b, `audit-report.md`) | Needs `DATABASE_URL` + `TEST_ADMIN_DATABASE_URL` (CREATEDB role). Floor 79% not checked. |
+| `ruff check .` | **Pass** (ran, Unit 2.1, Python 3.12.13 `venv`) | `All checks passed!` |
+| `ruff format --check .` | **Pass** (ran, Unit 2.1) | `94 files already formatted` |
+| `mypy` | **Pass** (ran, Unit 2.1) | `Success: no issues found in 26 source files` |
+| DB-free pytest subset (same 7 files as row 1) | **Pass** (ran, Unit 2.1, Python 3.12.13) | 132 passed, 7 warnings |
+| PostgreSQL server version | Not recorded | No server reachable with available credentials. |
 | `make check` | Not run | Needs DB and `TEST_ADMIN_DATABASE_URL`. |
 | Desktop `npm test` | Not run (this unit). Last recorded: 55 tests (Phase 2) | Not re-run. |
 | `make up`, `make test`, `make health`, Docker image build | Not run | Docker not exercised. Never verified per `audit-report.md`. |
@@ -76,7 +80,7 @@ Who calls what: the API (`app/main.py`, `routers/admin.py`) uses `ml.bundle` onl
 
 ## 4. Defect register
 
-D-01..D-04 are defined in `docs/history/defect-register.md` and `docs/history/backend-stabilization.md`. S-01..S-04 could not be found in any file; the plan that held them was deleted. **S-01..S-04: definitions missing, not carried over.** Please supply them; none are invented here.
+D-01..D-04 are defined in `docs/history/defect-register.md` and `docs/history/backend-stabilization.md`. S-01..S-04 could not be found in any file; the plan that held them was deleted. S-01..S-04 definitions were supplied with the Unit 2.1 task and are recorded below.
 
 Units 1-3 evidence is absent, so "status" below is what the repo records, not a fresh reproduction.
 
@@ -86,7 +90,10 @@ Units 1-3 evidence is absent, so "status" below is what the repo records, not a 
 | D-02 | High (was) | `001_add_github_unique.sql` creates `uq_github_activity` | GitHub ingest failed on fresh DB | Not re-run here | Low | Fixed per history; **not re-verified** |
 | D-03 | High (was) | History: hidden synthetic fallbacks, ingest routes and pipeline removed. Current code: `sync.execute_run` raises/records `failed` on `ProviderError` and writes nothing; `grep` finds no pipeline/ingest router in `app/` | Scoring on fabricated activity | Code reading only | Low | Fixed per history and code reading; **not re-verified by run** |
 | D-04 | High (was) | History: `/admin/*` 503 when `ADMIN_KEY` unset. Current doc says `/admin/*` requires role claim `pis_operator` (`app/auth.py`, `require_operator`) | Admin bypass | Not re-run. The mechanism described in the history (`ADMIN_KEY`) differs from the current one (JWT role); the register does not say which test covers the new path | Medium: confirm coverage | Suspected stale; **not verified** |
-| S-01..S-04 | – | Definitions missing | – | – | – | Unknown |
+| S-01 | – | Packaged desktop fetches a different origin (`http://localhost:8000`); the API has no CORS middleware | Packaged app may fail all API calls | Not run | – | Suspected, not run |
+| S-02 | – | Production image has no models (gitignored and in `.dockerignore`); `APP_ENV=staging` may refuse to start for lack of an active bundle | Staging/production boot failure | Not run | – | Suspected, not run |
+| S-03 | – | OIDC sign-in loop untested outside mocks | Sign-in may loop against a real IdP | Not run | – | Suspected, not run |
+| S-04 | – | Possible order/timing dependence in `tests/test_sync.py`. An independent run did not reproduce it: 294 passed with fixed and random order on Python 3.12 / PG 16 (not run by this unit) | Flaky tests | Not run | – | Suspected, not run |
 
 New observations from this unit (all read, none reproduced by run):
 
@@ -96,6 +103,7 @@ New observations from this unit (all read, none reproduced by run):
 | N-02 | Low | `current-state.md` §6 notes `model-lifecycle.md` names `insights/` (stale) and that `sqlalchemy` in `requirements.txt` is unused | Doc/dependency drift | Low | Confirmed by the doc itself; not re-checked |
 | N-03 | Low | Untracked stale `.pyc` for removed modules in `app/routers/__pycache__`, `services/__pycache__` | Noise only | Low | Confirmed (listing) |
 | N-04 | Medium | `create_assessment` inserts `insufficient_evidence` unconditionally; `reason` text depends only on whether any provider data exists | Not a defect in the current design; recorded because any later real-user score needs a new feature path (see §5) | Info | Confirmed |
+| N-05 | Medium | `apps/desktop/src/lib/assessment.ts` and `screens/Overview.tsx` read `leetcode_solved_all`; no backend code emits it (only `leetcode_solved_easy/_medium/_hard`); only `api/mock.ts` supplies it | Client shows/derives nothing from LeetCode totals on real data (e.g. the `solve` priority never fires) | Medium | Confirmed |
 
 ## 5. Architectural limitations and open decisions
 
@@ -121,4 +129,3 @@ Open decisions (from PRD §19, `docs/product/PIS_PRD.md`; no answers given here)
 Additional questions raised by this record, unanswered:
 
 - Whether D-04 coverage of the operator-role path is sufficient. The history describes `ADMIN_KEY`; the code now uses a JWT role.
-- Where S-01..S-04 are defined.
