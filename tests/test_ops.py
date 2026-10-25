@@ -24,7 +24,7 @@ def test_ready_ok():
     assert r.status_code == 200 and r.json() == {"status": "ready"}
 
 
-def test_ready_503_on_pending_migrations_and_no_model():
+def test_ready_503_on_pending_migrations():
     with (
         patch("app.main.get_connection") as gc,
         patch("app.main.pending", return_value=["009.sql"]),
@@ -32,7 +32,7 @@ def test_ready_503_on_pending_migrations_and_no_model():
     ):
         gc.return_value.__enter__.return_value = object()
         r = client.get("/health/ready")
-    assert r.status_code == 503 and r.json()["problems"] == ["migrations", "model"]
+    assert r.status_code == 503 and r.json()["problems"] == ["migrations"]
 
 
 def test_ready_503_when_db_down():
@@ -53,6 +53,17 @@ def test_json_log_carries_request_id():
 
 def _staging(monkeypatch):
     monkeypatch.setattr("config.APP_ENV", "staging")
+
+
+def test_local_ready_without_model():
+    with (
+        patch("app.main.get_connection") as gc,
+        patch("app.main.pending", return_value=[]),
+        patch("app.main.active_version", side_effect=RuntimeError("none")),
+    ):
+        gc.return_value.__enter__.return_value = object()
+        r = client.get("/health/ready")
+    assert r.status_code == 200 and r.json() == {"status": "ready"}
 
 
 def test_staging_ready_without_model(monkeypatch):
@@ -99,7 +110,6 @@ def _lifespan(monkeypatch, env, load_active):
         patch("app.main.check_db_connection", return_value=True),
         patch("app.main.get_connection"),
         patch("app.main.pending", return_value=[]),
-        patch("app.main.load_active", side_effect=load_active),
         patch("app.main.close_pool"),
     ):
         with TestClient(app):
@@ -110,11 +120,8 @@ def test_staging_starts_without_model(monkeypatch):
     _lifespan(monkeypatch, "staging", RuntimeError("no bundle"))
 
 
-def test_local_start_fails_without_model(monkeypatch):
-    import pytest
-
-    with pytest.raises(RuntimeError, match="Startup failed"):
-        _lifespan(monkeypatch, "local", RuntimeError("no bundle"))
+def test_local_starts_without_model(monkeypatch):
+    _lifespan(monkeypatch, "local", RuntimeError("no bundle"))
 
 
 def test_cors_allowed_origin_and_preflight(monkeypatch):
@@ -216,3 +223,26 @@ def test_dead_pooled_connection_is_replaced_not_surfaced():
     with patch.object(db_connection, "_get_pool", return_value=p):
         live = db_connection._checkout()
     assert live.dead is False and p.discarded[0][1] is True
+
+
+def test_scale_features_rejects_empty_frame():
+    import pandas as pd
+    import pytest
+
+    from features.compute import scale_features
+
+    with pytest.raises(ValueError, match="no students"):
+        scale_features(pd.DataFrame())
+
+
+def test_entrypoint_ml_pipeline_is_opt_in():
+    from pathlib import Path
+
+    sh = Path("entrypoint.sh").read_text()
+    guard = sh.index("LOCAL_ML_BOOTSTRAP:-false")
+    assert (
+        guard
+        < sh.index("python -m ml.train")
+        < sh.index("exec uvicorn app.main:app --host 0.0.0.0 --port 8000\n", guard)
+    )
+    assert "python -m features.compute" in sh[guard:]

@@ -2,11 +2,12 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SessionProvider, useSession } from "./session";
-import { parseCallback, makePkce } from "./oidc";
+import { parseCallback, makePkce, discover, buildAuthUrl, describeClaims } from "./oidc";
 import { setAuthHooks } from "../api/client";
 import type { Native } from "./native";
 
 const META = {
+  issuer: "https://idp",
   authorization_endpoint: "https://idp/auth",
   token_endpoint: "https://idp/token",
   revocation_endpoint: "https://idp/revoke",
@@ -17,7 +18,7 @@ function idp(token: (form: URLSearchParams) => Response | Promise<Response>) {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push(url);
-      if (url.endsWith("openid-configuration")) return Response.json(META);
+      if (url.endsWith("oauth-authorization-server")) return Response.json(META);
       if (url === META.token_endpoint) return token(init!.body as URLSearchParams);
       return new Response(null, { status: 204 }); // revoke + /auth/logout
     }),
@@ -136,4 +137,42 @@ it("rejects a callback whose state does not match", async () => {
   expect(() => parseCallback("code=a&state=evil", "good")).toThrow();
   const p = await makePkce();
   expect(p.challenge).not.toBe(p.verifier);
+});
+
+it("metadata is rejected when its issuer differs, a field is missing, or the fetch fails", async () => {
+  const meta = (m: object, status = 200) =>
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(m, { status })));
+  meta({ ...META, issuer: "https://evil" });
+  await expect(discover("https://idp")).rejects.toMatchObject({ kind: "config" });
+  meta({ issuer: "https://idp", token_endpoint: "t" });
+  await expect(discover("https://idp")).rejects.toMatchObject({ kind: "config" });
+  meta(META, 500);
+  await expect(discover("https://idp")).rejects.toMatchObject({ kind: "network" });
+  vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+  await expect(discover("https://idp")).rejects.toMatchObject({ kind: "network" });
+  meta(META);
+  await expect(discover("https://idp")).resolves.toMatchObject({ token_endpoint: META.token_endpoint });
+});
+
+it("auth URL carries PKCE S256 and scopes, and no audience parameter", () => {
+  const q = new URL(buildAuthUrl(META, "http://127.0.0.1:1/callback", { challenge: "c", state: "s" })).searchParams;
+  expect(q.get("code_challenge_method")).toBe("S256");
+  expect(q.get("scope")).toBe("openid email offline_access");
+  expect(q.has("audience")).toBe(false);
+});
+
+it("claim diagnostic reports names and identifiers only", () => {
+  const b = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, "");
+  const d = describeClaims(`h.${b({ iss: "i", sub: "u", azp: "a", exp: 2, iat: 1 })}.SECRET`);
+  expect(d).toEqual({
+    claims: ["iss", "sub", "azp", "exp", "iat"],
+    iss: "i",
+    aud: undefined,
+    azp: "a",
+    client_id: undefined,
+    hasSub: true,
+    exp: 2,
+    iat: 1,
+  });
+  expect(JSON.stringify(d)).not.toContain("SECRET");
 });

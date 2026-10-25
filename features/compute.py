@@ -57,6 +57,9 @@ def scale_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     import joblib
 
+    if df.empty:
+        raise ValueError("no students with features: nothing to scale")
+
     # Save raw (unscaled) version — useful for Phase 5 insight thresholds
     df.to_csv(RAW_CSV, index=False)
     print(f"Raw features saved → {RAW_CSV}")
@@ -89,5 +92,8 @@ def print_summary(raw: pd.DataFrame, scaled: pd.DataFrame):
 if __name__ == "__main__":
     run_feature_sql()  # Step 1: populate features table
     raw = load_features()  # Step 2: pull into Pandas
+    if raw.empty:  # empty DB is a valid local state; write no scaler or CSVs
+        print("No students with features; skipping scaling.")
+        raise SystemExit(0)
     scaled = scale_features(raw)  # Step 3: scale + export CSVs
     print_summary(raw, scaled)  # Step 4: sanity check output

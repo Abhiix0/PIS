@@ -1,7 +1,6 @@
 """Auth test support: a locally generated RSA key stands in for the IdP's JWKS."""
 
 import os
-import sys
 import time
 
 import jwt
@@ -51,12 +50,25 @@ def _test_db(tmp_path_factory):
     import uuid
 
     admin_url = os.getenv("TEST_ADMIN_DATABASE_URL")
-    if not admin_url:  # DB tests then use the ambient DATABASE_URL, or skip as before
-        msg = "TEST_ADMIN_DATABASE_URL not set: DB tests run on ambient DATABASE_URL or skip"
-        if os.getenv("CI") == "true":
-            raise RuntimeError(msg)
-        print(msg, file=sys.stderr)
+    if not admin_url:
+        # Never fall back to the app DATABASE_URL: DB tests would write to the real database.
+        if os.getenv("PIS_TESTS_NO_DB") != "1":
+            pytest.exit(
+                "TEST_ADMIN_DATABASE_URL is not set. Tests need a role that can CREATE DATABASE and "
+                "run on a throwaway database (use `make test` or `make test-local`, or export it, "
+                "e.g. postgresql://<superuser>:<pw>@localhost:5432/postgres). "
+                "DB-free subset only: PIS_TESTS_NO_DB=1.",
+                returncode=2,
+            )
+        from ingest import db_connection
+
+        mp = (
+            pytest.MonkeyPatch()
+        )  # DB-free mode: any DB access fails instead of reaching the app DB
+        for mod in (config, db_connection):
+            mp.setattr(mod, "DATABASE_URL", "")
         yield
+        mp.undo()
         return
 
     import json

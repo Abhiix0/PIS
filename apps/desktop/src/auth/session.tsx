@@ -14,6 +14,7 @@ import {
   AuthError,
   buildAuthUrl,
   config,
+  describeClaims,
   discover,
   exchangeCode,
   makePkce,
@@ -135,6 +136,13 @@ export function SessionProvider({ children, native = realNative }: { children: R
       if (me !== attempt.current) return;
       if (t.refresh) await native.saveRefresh(t.refresh);
       tokens.current = t;
+      if (import.meta.env.DEV) {
+        try {
+          console.info("[auth-diagnostic] access token claims", describeClaims(t.access));
+        } catch {
+          console.info("[auth-diagnostic] access token is not a JWT (opaque?)");
+        }
+      }
       setState("signed-in");
     } catch (e) {
       if (me !== attempt.current) return;

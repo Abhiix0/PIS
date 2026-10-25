@@ -1,4 +1,5 @@
-// Generic OIDC (authorization code + PKCE, public client). Endpoints come from discovery; nothing here is provider specific.
+// OAuth 2.0 authorization code + PKCE, public client. Endpoints come from RFC 8414 metadata (Clerk serves
+// /.well-known/oauth-authorization-server, not openid-configuration).
 export class AuthError extends Error {
   constructor(
     public kind: "network" | "invalid_grant" | "cancelled" | "state" | "config" | "other",
@@ -14,6 +15,7 @@ export interface Tokens {
   refresh?: string;
 }
 export interface Meta {
+  issuer: string;
   authorization_endpoint: string;
   token_endpoint: string;
   revocation_endpoint?: string;
@@ -22,7 +24,6 @@ export interface Meta {
 export const config = () => ({
   issuer: (import.meta.env.VITE_AUTH_ISSUER ?? "").replace(/\/$/, ""),
   clientId: import.meta.env.VITE_AUTH_CLIENT_ID ?? "",
-  audience: import.meta.env.VITE_AUTH_AUDIENCE as string | undefined,
 });
 
 const b64url = (b: Uint8Array) =>
@@ -40,27 +41,31 @@ export async function makePkce() {
 
 export async function discover(issuer: string): Promise<Meta> {
   if (!issuer || !config().clientId) throw new AuthError("config", "Sign-in is not configured.");
+  let m: Meta;
   try {
-    const m = await (await fetch(`${issuer}/.well-known/openid-configuration`)).json();
-    if (!m.authorization_endpoint || !m.token_endpoint) throw new Error("incomplete");
-    return m;
+    const res = await fetch(`${issuer}/.well-known/oauth-authorization-server`);
+    if (!res.ok) throw new Error("status");
+    m = await res.json();
   } catch {
     throw new AuthError("network", "Cannot reach the sign-in service.");
   }
+  // RFC 8414 3.3: metadata must name the issuer it was fetched for, or it may be a substituted document.
+  if (m.issuer !== issuer || !m.authorization_endpoint || !m.token_endpoint)
+    throw new AuthError("config", "Sign-in service metadata is invalid.");
+  return m;
 }
 
 export function buildAuthUrl(m: Meta, redirectUri: string, p: { challenge: string; state: string }) {
-  const { clientId, audience } = config();
+  const { clientId } = config();
   const q = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: "openid offline_access",
+    scope: "openid email offline_access",
     code_challenge: p.challenge,
     code_challenge_method: "S256",
     state: p.state,
   });
-  if (audience) q.set("audience", audience);
   return `${m.authorization_endpoint}?${q}`;
 }
 
@@ -126,4 +131,11 @@ export async function refreshTokens(m: Meta, refresh: string) {
 export async function revoke(m: Meta, refresh: string) {
   if (m.revocation_endpoint)
     await post(m.revocation_endpoint, { token: refresh, token_type_hint: "refresh_token" }).catch(() => {});
+}
+
+/** Dev-only diagnostic: which claims did the IdP put in the access token? Decodes WITHOUT verifying; never returns the token. */
+export function describeClaims(jwt: string) {
+  const c = JSON.parse(atob((jwt.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/")));
+  const { iss, aud, azp, client_id, exp, iat } = c;
+  return { claims: Object.keys(c), iss, aud, azp, client_id, hasSub: "sub" in c, exp, iat };
 }

@@ -13,7 +13,7 @@ from app.logger import logger
 from app.routers import admin, v1
 from ingest.db_connection import close_pool, get_connection
 from ingest.migrate import pending
-from ml.bundle import active_version, load_active
+from ml.bundle import active_version
 
 
 def check_db_connection() -> bool:
@@ -46,16 +46,6 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 errors.append(f"Could not check migrations: {type(e).__name__}")
 
-    active_model = None
-    # Real-user assessments never use the model, so deployed envs don't require one.
-    if not errors and not config.is_deployed():
-        try:
-            active_model = load_active().version  # verifies checksums and feature schema
-        except Exception as e:
-            errors.append(
-                f"No usable active model: {e}. Train, then: python -m ml.bundle approve/activate <version> --by <you>"
-            )
-
     if errors:
         for error in errors:
             print(f"[STARTUP ERROR] {error}")
@@ -68,7 +58,6 @@ async def lifespan(app: FastAPI):
 
     print("NexGauge API started successfully")
     print("  Database: connected")
-    print(f"  Model:    {active_model or 'not required in ' + config.APP_ENV}")
     print("  Docs:     http://localhost:8000/docs")
 
     yield
@@ -148,7 +137,7 @@ def health():
 
 @app.get("/health/ready", tags=["System"])
 def health_ready():
-    """Readiness probe (load balancer): 503 unless the DB answers and migrations are applied; locally also needs an active model."""
+    """Readiness probe (load balancer): 503 unless the DB answers and migrations are applied; an active ML model is not required (real-user assessments are deterministic)."""
     problems = []
     try:
         with get_connection() as conn:
@@ -156,11 +145,6 @@ def health_ready():
                 problems.append("migrations")
     except Exception:
         problems.append("database")
-    if not config.is_deployed():
-        try:
-            active_version()
-        except Exception:
-            problems.append("model")
     if problems:
         return JSONResponse(status_code=503, content={"status": "unready", "problems": problems})
     return {"status": "ready"}
@@ -174,8 +158,7 @@ def health_detailed():
         model_version = active_version()
     except Exception:
         model_version = None
-    model_ok = model_version is not None or config.is_deployed()
-    if config.is_deployed() and model_version is None:
+    if model_version is None:
         model_version = "none"
 
     features_freshness = None
@@ -198,7 +181,7 @@ def health_detailed():
     uptime_seconds = round(time.time() - _startup_time)
 
     return {
-        "status": "ok" if db_ok and model_ok else "degraded",
+        "status": "ok" if db_ok else "degraded",
         "version": app.version,
         "uptime_seconds": uptime_seconds,
         "database": "connected" if db_ok else "disconnected",

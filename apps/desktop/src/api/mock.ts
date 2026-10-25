@@ -260,8 +260,8 @@ export function installMock() {
     );
     if (u.host === "mock.idp")
       // OIDC stand-in so the normal session code path runs unchanged
-      return u.pathname.endsWith("openid-configuration")
-        ? json({ authorization_endpoint: "http://mock.idp/auth", token_endpoint: "http://mock.idp/token" })
+      return u.pathname.endsWith("oauth-authorization-server")
+        ? json({ issuer: "http://mock.idp", authorization_endpoint: "http://mock.idp/auth", token_endpoint: "http://mock.idp/token" })
         : json({ access_token: "mock", expires_in: 3600, refresh_token: "mock" });
     if (u.origin !== new URL(API_BASE_URL).origin) return real(input, init);
     if (flag === "slow") await new Promise((r) => setTimeout(r, 60_000));

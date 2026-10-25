@@ -18,19 +18,21 @@ restart:
 	docker-compose restart api
 
 test:
-	docker-compose exec api pytest tests/ -v --tb=short
+	# throwaway DB on the compose db server (pis_user can CREATE DATABASE); never the app DB
+	docker-compose exec api sh -c 'TEST_ADMIN_DATABASE_URL="$${DATABASE_URL%/*}/postgres" pytest tests/ -v --tb=short'
 
 lint:
 	$(PY) -m ruff check . && $(PY) -m ruff format --check . && $(PY) -m mypy
 
 test-unit:
-	pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_migrate.py -v --tb=short
+	PIS_TESTS_NO_DB=1 pytest tests/test_core.py tests/test_github_api.py tests/test_leetcode_api.py tests/test_config.py tests/test_migrate.py -v --tb=short
 
 migrate:
 	docker-compose exec api python -m ingest.migrate
 
 # needs only DATABASE_URL + TEST_ADMIN_DATABASE_URL (role with CREATEDB); tests build a throwaway DB
 test-local:
+	@test -n "$$TEST_ADMIN_DATABASE_URL" || { echo 'set TEST_ADMIN_DATABASE_URL (role with CREATEDB, e.g. postgresql://<superuser>:<pw>@localhost:5432/postgres)'; exit 2; }
 	$(PY) -m pytest tests/ -v --tb=short
 
 health:
